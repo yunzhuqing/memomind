@@ -1,0 +1,36 @@
+{
+  "name": "memomind",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/pg": "^8.15.6",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.2.3",
+    "easymde": "^2.20.0",
+    "marked": "^17.0.0",
+    "next": "16.0.1",
+    "pg": "^8.16.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-markdown": "^10.1.0",
+    "react-simplemde-editor": "^5.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
