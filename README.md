@@ -7,24 +7,30 @@ A full-stack markdown notebook application built with Next.js, React, TypeScript
 - 📝 **Markdown Editor**: Write and preview markdown notes with a feature-rich editor
 - 👤 **User Authentication**: Secure registration and login system
 - 💾 **PostgreSQL Database**: Persistent storage for users and notes
+- 📁 **File Management**: Upload, organize, and manage files with S3 storage
+- 🗂️ **Directory Support**: Create folders to organize your files
+- 🔍 **Search & Filter**: Search files by name and filter by type
 - 🎨 **Modern UI**: Clean and responsive design with Tailwind CSS
 - ⚡ **Real-time Preview**: Toggle between edit and preview modes
-- 🔒 **Secure**: Password hashing with bcrypt
+- 🔒 **Secure**: Password hashing with bcrypt and secure S3 file storage
 
 ## Tech Stack
 
 - **Frontend**: Next.js 16, React 19, TypeScript
 - **Styling**: Tailwind CSS
 - **Database**: PostgreSQL
+- **File Storage**: AWS S3
 - **Markdown Editor**: SimpleMDE (EasyMDE)
 - **Authentication**: bcrypt for password hashing
 - **Database Client**: node-postgres (pg)
+- **Icons**: Heroicons
 
 ## Prerequisites
 
 Before you begin, ensure you have the following installed:
 - Node.js (v18 or higher)
 - PostgreSQL (v12 or higher)
+- AWS Account with S3 bucket configured
 - npm or yarn
 
 ## Installation
@@ -54,32 +60,54 @@ Before you begin, ensure you have the following installed:
 
 4. **Initialize the database schema**
 
-   Run the SQL script to create tables:
+   Run the initialization script:
    ```bash
-   psql -d memomind -f scripts/init-db.sql
+   node scripts/init-db.js
    ```
 
-   Or manually execute the SQL:
-   ```bash
-   psql -d memomind
-   ```
-   Then copy and paste the contents of `scripts/init-db.sql`
+   This will create all necessary tables including:
+   - users
+   - notes
+   - files
+   - directories
 
 5. **Configure environment variables**
 
-   Create a `.env.local` file in the root directory:
+   Create a `.env` file in the root directory:
    ```bash
-   cp .env.example .env.local
+   cp .env.example .env
    ```
 
-   Update the values in `.env.local` with your PostgreSQL credentials:
+   Update the values in `.env` with your credentials:
    ```env
+   # Database Configuration
+   DATABASE_URL=postgresql://username:password@host:port/database
    DB_USER=your_postgres_user
    DB_HOST=localhost
    DB_NAME=memomind
    DB_PASSWORD=your_postgres_password
    DB_PORT=5432
+
+   # AWS S3 Configuration
+   AWS_REGION=us-east-1
+   AWS_ACCESS_KEY_ID=your_aws_access_key_id
+   AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+   AWS_S3_BUCKET_NAME=your_s3_bucket_name
    ```
+
+6. **Set up AWS S3**
+
+   a. Create an S3 bucket in your AWS account
+   
+   b. Configure bucket permissions:
+   - Enable versioning (optional but recommended)
+   - Set appropriate CORS configuration if accessing from browser
+   
+   c. Create an IAM user with S3 access:
+   - Attach policy: `AmazonS3FullAccess` or create a custom policy
+   - Generate access keys (Access Key ID and Secret Access Key)
+   
+   d. Update your `.env` file with the S3 credentials
 
 ## Running the Application
 
@@ -110,6 +138,13 @@ Before you begin, ensure you have the following installed:
    - Click on any note in the sidebar to view/edit it
    - Use the "Preview" button to see the rendered markdown
    - Delete notes using the "Delete" button
+
+4. **Use the File Manager**
+   - Click the "Files" tab to access file management
+   - Upload files (images, videos, PDFs, text, markdown)
+   - Create folders to organize your files
+   - Search and filter files by type
+   - Download or delete files as needed
 
 ### Markdown Features
 
@@ -145,6 +180,32 @@ The editor supports standard markdown syntax:
 - updated_at: TIMESTAMP
 ```
 
+### Files Table
+```sql
+- id: SERIAL PRIMARY KEY
+- user_id: INTEGER (Foreign Key to users)
+- filename: VARCHAR(255) NOT NULL
+- original_filename: VARCHAR(255) NOT NULL
+- file_path: VARCHAR(500) NOT NULL (S3 key)
+- file_type: VARCHAR(100) NOT NULL
+- file_size: BIGINT NOT NULL
+- mime_type: VARCHAR(100)
+- directory_path: VARCHAR(500) DEFAULT '/'
+- created_at: TIMESTAMP
+- updated_at: TIMESTAMP
+```
+
+### Directories Table
+```sql
+- id: SERIAL PRIMARY KEY
+- user_id: INTEGER (Foreign Key to users)
+- name: VARCHAR(255) NOT NULL
+- path: VARCHAR(500) NOT NULL
+- parent_path: VARCHAR(500) DEFAULT '/'
+- created_at: TIMESTAMP
+- updated_at: TIMESTAMP
+```
+
 ## API Routes
 
 ### Authentication
@@ -157,6 +218,17 @@ The editor supports standard markdown syntax:
 - `PUT /api/notes` - Update an existing note
 - `DELETE /api/notes?id={noteId}` - Delete a note
 
+### Files
+- `GET /api/files` - List files with optional search and filters
+- `POST /api/files/upload` - Upload a file to S3
+- `GET /api/files/download` - Download a file from S3
+- `DELETE /api/files?fileId={fileId}` - Delete a file
+
+### Directories
+- `GET /api/directories` - List directories
+- `POST /api/directories` - Create a new directory
+- `DELETE /api/directories?directoryId={directoryId}` - Delete a directory
+
 ## Project Structure
 
 ```
@@ -166,8 +238,14 @@ memomind/
 │   │   ├── auth/
 │   │   │   ├── login/route.ts
 │   │   │   └── register/route.ts
+│   │   ├── directories/route.ts
+│   │   ├── files/
+│   │   │   ├── download/route.ts
+│   │   │   ├── upload/route.ts
+│   │   │   └── route.ts
 │   │   └── notes/route.ts
 │   ├── components/
+│   │   ├── FileManager.tsx
 │   │   └── MarkdownEditor.tsx
 │   ├── contexts/
 │   │   └── AuthContext.tsx
@@ -177,9 +255,12 @@ memomind/
 │   ├── layout.tsx
 │   └── page.tsx
 ├── lib/
-│   └── db.ts
+│   ├── db.ts
+│   └── s3.ts
 ├── scripts/
-│   └── init-db.sql
+│   ├── init-db.sql
+│   ├── init-db-files.sql
+│   └── init-db.js
 ├── .env.example
 └── README.md
 ```
@@ -205,13 +286,21 @@ npm run lint
 - User sessions are managed client-side with localStorage
 - API routes validate user authentication via headers
 - SQL injection protection through parameterized queries
+- Files are stored securely in AWS S3 with presigned URLs for downloads
+- S3 credentials are stored in environment variables
 
 ## Troubleshooting
 
 ### Database Connection Issues
 - Ensure PostgreSQL is running: `pg_isready`
-- Check your `.env.local` credentials
+- Check your `.env` credentials
 - Verify the database exists: `psql -l`
+
+### S3 Upload/Download Issues
+- Verify AWS credentials are correct in `.env`
+- Check S3 bucket permissions and CORS configuration
+- Ensure the bucket name and region are correct
+- Verify IAM user has necessary S3 permissions
 
 ### Port Already in Use
 - Change the port in `package.json` or kill the process using port 3000
@@ -225,10 +314,13 @@ npm run lint
 - [ ] Session-based authentication with JWT
 - [ ] Note sharing and collaboration
 - [ ] Tags and categories for notes
-- [ ] Search functionality
+- [ ] Advanced search functionality
 - [ ] Export notes to PDF/HTML
 - [ ] Dark mode support
 - [ ] Rich text formatting toolbar
+- [ ] File preview for images and PDFs
+- [ ] Bulk file operations
+- [ ] File versioning
 
 ## License
 
