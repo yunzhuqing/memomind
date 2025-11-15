@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import { uploadFileToS3, generateS3Key } from '@/lib/s3';
 import pool from '@/lib/db';
+import { getFileType } from '@/lib/fileUtils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,13 +73,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function getFileType(mimeType: string, ext: string): string {
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('video/')) return 'video';
-  if (mimeType === 'application/pdf') return 'pdf';
-  if (mimeType === 'text/plain' || ext === '.txt') return 'text';
-  if (mimeType === 'text/markdown' || ext === '.md') return 'markdown';
-  return 'other';
 }

@@ -1,4 +1,14 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { 
+  S3Client, 
+  PutObjectCommand, 
+  GetObjectCommand, 
+  DeleteObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+  ListPartsCommand
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Initialize S3 client
@@ -97,4 +107,87 @@ export function generateS3Key(userId: string, filename: string, directoryPath: s
   parts.push(filename);
   
   return parts.join('/');
+}
+
+/**
+ * Initiate multipart upload
+ */
+export async function initiateMultipartUpload(key: string, contentType: string): Promise<string> {
+  const command = new CreateMultipartUploadCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  const response = await s3Client.send(command);
+  return response.UploadId!;
+}
+
+/**
+ * Upload a single part
+ */
+export async function uploadPart(
+  key: string,
+  uploadId: string,
+  partNumber: number,
+  body: Buffer
+): Promise<string> {
+  const command = new UploadPartCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+    PartNumber: partNumber,
+    Body: body,
+  });
+
+  const response = await s3Client.send(command);
+  return response.ETag!;
+}
+
+/**
+ * Complete multipart upload
+ */
+export async function completeMultipartUpload(
+  key: string,
+  uploadId: string,
+  parts: Array<{ PartNumber: number; ETag: string }>
+): Promise<string> {
+  const command = new CompleteMultipartUploadCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+    MultipartUpload: {
+      Parts: parts,
+    },
+  });
+
+  await s3Client.send(command);
+  return `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
+}
+
+/**
+ * Abort multipart upload
+ */
+export async function abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+  const command = new AbortMultipartUploadCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+  });
+
+  await s3Client.send(command);
+}
+
+/**
+ * List uploaded parts
+ */
+export async function listUploadedParts(key: string, uploadId: string): Promise<number[]> {
+  const command = new ListPartsCommand({
+    Bucket: BUCKET_NAME,
+    Key: key,
+    UploadId: uploadId,
+  });
+
+  const response = await s3Client.send(command);
+  return response.Parts?.map(part => part.PartNumber!) || [];
 }
