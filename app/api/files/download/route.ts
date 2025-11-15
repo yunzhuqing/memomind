@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const fileId = searchParams.get('fileId');
     const userId = searchParams.get('userId');
+    const thumbnail = searchParams.get('thumbnail'); // Check if thumbnail is requested
 
     if (!fileId || !userId) {
       return NextResponse.json(
@@ -30,8 +31,16 @@ export async function GET(request: NextRequest) {
 
     const file = result.rows[0];
 
+    // Determine which file to serve (thumbnail or original)
+    let s3Key = file.file_path;
+    
+    // If thumbnail is requested and available, use thumbnail
+    if (thumbnail === 'true' && file.thumbnail_key) {
+      s3Key = file.thumbnail_key;
+    }
+
     // Generate presigned URL for S3 download
-    const downloadUrl = await getDownloadUrl({ key: file.file_path });
+    const downloadUrl = await getDownloadUrl({ key: s3Key });
 
     // Redirect to the presigned URL
     return NextResponse.redirect(downloadUrl);

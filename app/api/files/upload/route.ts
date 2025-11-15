@@ -3,6 +3,7 @@ import path from 'path';
 import { uploadFileToS3, generateS3Key } from '@/lib/s3';
 import pool from '@/lib/db';
 import { getFileType } from '@/lib/fileUtils';
+import { generateThumbnail } from '@/lib/thumbnailGenerator';
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,10 +43,31 @@ export async function POST(request: NextRequest) {
     // Determine file type
     const fileType = getFileType(file.type, ext);
 
+    // Generate thumbnail for images and videos
+    let thumbnailKey = null;
+    if (fileType === 'image' || fileType === 'video') {
+      try {
+        const thumbnailResult = await generateThumbnail(
+          buffer,
+          originalName,
+          fileType,
+          s3Key,
+          userId
+        );
+        if (thumbnailResult) {
+          thumbnailKey = thumbnailResult.thumbnailKey;
+          console.log(`Thumbnail generated: ${thumbnailKey}`);
+        }
+      } catch (error) {
+        console.error('Failed to generate thumbnail:', error);
+        // Continue without thumbnail - non-critical error
+      }
+    }
+
     // Save file metadata to database
     const result = await pool.query(
-      `INSERT INTO files (user_id, filename, original_filename, file_path, file_type, file_size, mime_type, directory_path)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO files (user_id, filename, original_filename, file_path, file_type, file_size, mime_type, directory_path, thumbnail_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         userId,
@@ -56,6 +78,7 @@ export async function POST(request: NextRequest) {
         file.size,
         file.type,
         directoryPath,
+        thumbnailKey,
       ]
     );
 

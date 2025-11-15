@@ -4,9 +4,9 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
 import AppHeader from '@/app/components/AppHeader';
-import MarkdownEditor from '@/app/components/MarkdownEditor';
+import FileManager from '@/app/components/FileManager';
 
-export default function NotebookPage() {
+export default function FilesPage() {
   const { user, isAuthenticated, loading } = useAuth();
   const router = useRouter();
 
@@ -26,7 +26,7 @@ export default function NotebookPage() {
 
   return (
     <div className="h-screen flex flex-col">
-      <AppHeader activeTab="notes" onTabChange={(tab) => {
+      <AppHeader activeTab="files" onTabChange={(tab) => {
         if (tab === 'notes') {
           router.push('/notebook');
         } else {
@@ -36,7 +36,7 @@ export default function NotebookPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
-        <MarkdownEditor userId={user.id} />
+        <FileManager userId={user.id} />
       </div>
     </div>
   );

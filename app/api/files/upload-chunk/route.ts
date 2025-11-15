@@ -6,10 +6,12 @@ import {
   uploadPart, 
   completeMultipartUpload,
   abortMultipartUpload,
-  listUploadedParts
+  listUploadedParts,
+  getFileFromS3
 } from '@/lib/s3';
 import pool from '@/lib/db';
 import { getFileType } from '@/lib/fileUtils';
+import { generateThumbnail } from '@/lib/thumbnailGenerator';
 
 // Store upload sessions in memory (in production, use Redis or database)
 const uploadSessions = new Map<string, {
@@ -161,10 +163,42 @@ export async function POST(request: NextRequest) {
         session.parts
       );
 
+      // Generate thumbnail for images and videos
+      let thumbnailKey = null;
+      if (session.fileType === 'image' || session.fileType === 'video') {
+        try {
+          // Download the file from S3 to generate thumbnail
+          const s3Stream = await getFileFromS3({ key: session.key });
+          const chunks: Uint8Array[] = [];
+          
+          // Convert stream to buffer
+          for await (const chunk of s3Stream as any) {
+            chunks.push(chunk);
+          }
+          const buffer = Buffer.concat(chunks);
+
+          const thumbnailResult = await generateThumbnail(
+            buffer,
+            session.originalFilename,
+            session.fileType,
+            session.key,
+            session.userId
+          );
+          
+          if (thumbnailResult) {
+            thumbnailKey = thumbnailResult.thumbnailKey;
+            console.log(`Thumbnail generated for chunked upload: ${thumbnailKey}`);
+          }
+        } catch (error) {
+          console.error('Failed to generate thumbnail for chunked upload:', error);
+          // Continue without thumbnail - non-critical error
+        }
+      }
+
       // Save file metadata to database
       const result = await pool.query(
-        `INSERT INTO files (user_id, filename, original_filename, file_path, file_type, file_size, mime_type, directory_path)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO files (user_id, filename, original_filename, file_path, file_type, file_size, mime_type, directory_path, thumbnail_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
           session.userId,
@@ -175,6 +209,7 @@ export async function POST(request: NextRequest) {
           session.totalSize,
           session.mimeType,
           session.directoryPath,
+          thumbnailKey,
         ]
       );
 

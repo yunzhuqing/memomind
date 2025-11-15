@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { 
   FolderIcon, 
   DocumentIcon, 
@@ -134,13 +135,13 @@ export default function FileManager({ userId }: FileManagerProps) {
       
       if (data.success) {
         loadFiles();
-        alert('File uploaded successfully!');
+        toast.success('File uploaded successfully!');
       } else {
-        alert(data.error || 'Upload failed');
+        toast.error(data.error || 'Upload failed');
       }
     } catch (error) {
       console.error('Error uploading file:', error);
-      alert('Upload failed');
+      toast.error('Upload failed');
     }
   };
 
@@ -164,7 +165,7 @@ export default function FileManager({ userId }: FileManagerProps) {
 
       const initData = await initResponse.json();
       if (!initData.success) {
-        alert(initData.error || 'Failed to initialize upload');
+        toast.error(initData.error || 'Failed to initialize upload');
         return;
       }
 
@@ -276,13 +277,13 @@ export default function FileManager({ userId }: FileManagerProps) {
       
       if (data.success) {
         loadFiles();
-        alert('File deleted successfully!');
+        toast.success('File deleted successfully!');
       } else {
-        alert(data.error || 'Delete failed');
+        toast.error(data.error || 'Delete failed');
       }
     } catch (error) {
       console.error('Error deleting file:', error);
-      alert('Delete failed');
+      toast.error('Delete failed');
     }
   };
 
@@ -291,7 +292,7 @@ export default function FileManager({ userId }: FileManagerProps) {
       const response = await fetch(`/api/files/download?fileId=${fileId}&userId=${userId}`);
       
       if (!response.ok) {
-        alert('Download failed');
+        toast.error('Download failed');
         return;
       }
 
@@ -312,7 +313,7 @@ export default function FileManager({ userId }: FileManagerProps) {
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
-      alert('Please enter a folder name');
+      toast.error('Please enter a folder name');
       return;
     }
 
@@ -335,13 +336,13 @@ export default function FileManager({ userId }: FileManagerProps) {
         loadDirectories();
         setShowNewFolderDialog(false);
         setNewFolderName('');
-        alert('Folder created successfully!');
+        toast.success('Folder created successfully!');
       } else {
-        alert(data.error || 'Failed to create folder');
+        toast.error(data.error || 'Failed to create folder');
       }
     } catch (error) {
       console.error('Error creating folder:', error);
-      alert('Failed to create folder');
+      toast.error('Failed to create folder');
     }
   };
 
@@ -357,13 +358,13 @@ export default function FileManager({ userId }: FileManagerProps) {
       
       if (data.success) {
         loadDirectories();
-        alert('Folder deleted successfully!');
+        toast.success('Folder deleted successfully!');
       } else {
-        alert(data.error || 'Delete failed');
+        toast.error(data.error || 'Delete failed');
       }
     } catch (error) {
       console.error('Error deleting folder:', error);
-      alert('Delete failed');
+      toast.error('Delete failed');
     }
   };
 
@@ -397,7 +398,10 @@ export default function FileManager({ userId }: FileManagerProps) {
     }
   };
 
-  const getThumbnailUrl = (fileId: number) => {
+  const getThumbnailUrl = (fileId: number, useThumbnail: boolean = true) => {
+    if (useThumbnail) {
+      return `/api/files/download?fileId=${fileId}&userId=${userId}&thumbnail=true`;
+    }
     return `/api/files/download?fileId=${fileId}&userId=${userId}`;
   };
 
@@ -571,9 +575,10 @@ export default function FileManager({ userId }: FileManagerProps) {
                     {file.file_type === 'image' ? (
                       <div className="w-full h-full flex items-center justify-center overflow-hidden rounded-xl">
                         <img
-                          src={getThumbnailUrl(file.id)}
+                          src={getThumbnailUrl(file.id, true)}
                           alt={file.original_filename}
                           className="max-w-full max-h-full object-contain"
+                          loading="lazy"
                           onError={(e) => {
                             // Fallback to icon if image fails to load
                             e.currentTarget.style.display = 'none';
@@ -587,12 +592,13 @@ export default function FileManager({ userId }: FileManagerProps) {
                       </div>
                     ) : file.file_type === 'video' ? (
                       <div className="w-full h-full flex items-center justify-center overflow-hidden rounded-xl relative">
-                        <video
-                          src={getThumbnailUrl(file.id)}
+                        <img
+                          src={getThumbnailUrl(file.id, true)}
+                          alt={file.original_filename}
                           className="max-w-full max-h-full object-contain"
-                          preload="metadata"
+                          loading="lazy"
                           onError={(e) => {
-                            // Fallback to icon if video fails to load
+                            // Fallback to icon if thumbnail fails to load
                             e.currentTarget.style.display = 'none';
                             const fallback = e.currentTarget.nextElementSibling;
                             if (fallback) (fallback as HTMLElement).style.display = 'flex';
@@ -752,13 +758,13 @@ export default function FileManager({ userId }: FileManagerProps) {
           <div className="max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
             {previewFile.file_type === 'image' ? (
               <img
-                src={getThumbnailUrl(previewFile.id)}
+                src={getThumbnailUrl(previewFile.id, false)}
                 alt={previewFile.original_filename}
                 className="max-w-full max-h-full object-contain rounded-lg"
               />
             ) : previewFile.file_type === 'video' ? (
               <video
-                src={getThumbnailUrl(previewFile.id)}
+                src={getThumbnailUrl(previewFile.id, false)}
                 controls
                 autoPlay
                 className="max-w-full max-h-full rounded-lg"
