@@ -6,12 +6,11 @@ import {
   uploadPart, 
   completeMultipartUpload,
   abortMultipartUpload,
-  listUploadedParts,
-  getFileFromS3
+  listUploadedParts
 } from '@/lib/s3';
 import pool from '@/lib/db';
 import { getFileType } from '@/lib/fileUtils';
-import { generateThumbnail } from '@/lib/thumbnailGenerator';
+import { generateThumbnailFromS3 } from '@/lib/thumbnailGenerator';
 
 // Store upload sessions in memory (in production, use Redis or database)
 const uploadSessions = new Map<string, {
@@ -163,37 +162,29 @@ export async function POST(request: NextRequest) {
         session.parts
       );
 
-      // Generate thumbnail for images and videos
+      // Generate thumbnail for videos (optimized - no full download needed)
       let thumbnailKey = null;
-      if (session.fileType === 'image' || session.fileType === 'video') {
+      if (session.fileType === 'video') {
         try {
-          // Download the file from S3 to generate thumbnail
-          const s3Stream = await getFileFromS3({ key: session.key });
-          const chunks: Uint8Array[] = [];
-          
-          // Convert stream to buffer
-          for await (const chunk of s3Stream as any) {
-            chunks.push(chunk);
-          }
-          const buffer = Buffer.concat(chunks);
-
-          const thumbnailResult = await generateThumbnail(
-            buffer,
-            session.originalFilename,
-            session.fileType,
+          // Use optimized method that downloads only partial video (first 10MB)
+          const thumbnailResult = await generateThumbnailFromS3(
             session.key,
+            session.fileType,
             session.userId
           );
           
           if (thumbnailResult) {
             thumbnailKey = thumbnailResult.thumbnailKey;
-            console.log(`Thumbnail generated for chunked upload: ${thumbnailKey}`);
+            console.log(`Thumbnail generated for chunked upload (optimized): ${thumbnailKey}`);
           }
         } catch (error) {
           console.error('Failed to generate thumbnail for chunked upload:', error);
           // Continue without thumbnail - non-critical error
         }
       }
+      // Note: For images uploaded via chunks, thumbnail generation is skipped
+      // as it would require downloading the full file. Consider generating
+      // thumbnails on the client side for large images if needed.
 
       // Save file metadata to database
       const result = await pool.query(

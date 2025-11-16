@@ -1,15 +1,67 @@
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
-import { uploadFileToS3 } from './s3';
+import { uploadFileToS3, getDownloadUrl } from './s3';
 import path from 'path';
 import fs from 'fs';
 import { promisify } from 'util';
+import https from 'https';
+import http from 'http';
 
 const unlinkAsync = promisify(fs.unlink);
 
 interface ThumbnailResult {
   thumbnailKey: string;
   thumbnailUrl: string;
+}
+
+/**
+ * Download a partial range of a file from URL
+ */
+async function downloadPartialFile(url: string, outputPath: string, maxBytes: number = 10 * 1024 * 1024): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https') ? https : http;
+    
+    const request = protocol.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`Failed to download: ${response.statusCode}`));
+        return;
+      }
+
+      const fileStream = fs.createWriteStream(outputPath);
+      let downloadedBytes = 0;
+
+      response.on('data', (chunk) => {
+        downloadedBytes += chunk.length;
+        
+        // Stop downloading after maxBytes
+        if (downloadedBytes >= maxBytes) {
+          response.destroy();
+          fileStream.end();
+          resolve();
+        } else {
+          fileStream.write(chunk);
+        }
+      });
+
+      response.on('end', () => {
+        fileStream.end();
+        resolve();
+      });
+
+      response.on('error', (error) => {
+        fileStream.end();
+        reject(error);
+      });
+
+      fileStream.on('error', (error) => {
+        reject(error);
+      });
+    });
+
+    request.on('error', (error) => {
+      reject(error);
+    });
+  });
 }
 
 /**
@@ -51,7 +103,7 @@ export async function generateImageThumbnail(
 }
 
 /**
- * Generate thumbnail for a video
+ * Generate thumbnail for a video (optimized - downloads only partial file)
  */
 export async function generateVideoThumbnail(
   videoPath: string,
@@ -119,6 +171,37 @@ export async function generateVideoThumbnail(
 }
 
 /**
+ * Generate thumbnail for a video from S3 (optimized - downloads only partial file)
+ */
+export async function generateVideoThumbnailFromS3(
+  s3Key: string,
+  userId: string
+): Promise<ThumbnailResult> {
+  const tempVideoPath = `/tmp/video-partial-${Date.now()}.mp4`;
+  
+  try {
+    // Get presigned URL for the video
+    const videoUrl = await getDownloadUrl({ key: s3Key });
+    
+    // Download only first 10MB of video (enough for thumbnail generation)
+    // This avoids downloading the entire video file
+    await downloadPartialFile(videoUrl, tempVideoPath, 10 * 1024 * 1024);
+    
+    // Generate thumbnail from partial video
+    const result = await generateVideoThumbnail(tempVideoPath, s3Key, userId);
+    
+    // Clean up temp video file
+    await unlinkAsync(tempVideoPath).catch(() => {});
+    
+    return result;
+  } catch (error) {
+    // Clean up temp video file on error
+    await unlinkAsync(tempVideoPath).catch(() => {});
+    throw error;
+  }
+}
+
+/**
  * Generate thumbnail key from original key
  */
 function generateThumbnailKey(originalKey: string): string {
@@ -162,6 +245,28 @@ export async function generateThumbnail(
   } catch (error) {
     console.error('Error generating thumbnail:', error);
     // Return null if thumbnail generation fails (non-critical)
+    return null;
+  }
+}
+
+/**
+ * Generate thumbnail from S3 file (optimized for large files)
+ */
+export async function generateThumbnailFromS3(
+  s3Key: string,
+  fileType: string,
+  userId: string
+): Promise<ThumbnailResult | null> {
+  try {
+    if (fileType === 'video') {
+      // Use optimized method that downloads only partial video
+      return await generateVideoThumbnailFromS3(s3Key, userId);
+    }
+    
+    // For other types, return null (should use buffer-based method)
+    return null;
+  } catch (error) {
+    console.error('Error generating thumbnail from S3:', error);
     return null;
   }
 }
