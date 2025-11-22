@@ -17,9 +17,11 @@ import {
   ArrowDownTrayIcon,
   Squares2X2Icon,
   ListBulletIcon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowRightIcon
 } from '@heroicons/react/24/outline';
 import TaskCenter, { UploadTask } from './TaskCenter';
+import TorrentDialog from './TorrentDialog';
 
 interface FileItem {
   id: number;
@@ -54,6 +56,12 @@ export default function FileManager({ userId }: FileManagerProps) {
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [previewFile, setPreviewFile] = useState<FileItem | null>(null);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [fileToMove, setFileToMove] = useState<FileItem | null>(null);
+  const [moveDialogPath, setMoveDialogPath] = useState<string>('/');
+  const [moveDialogDirectories, setMoveDialogDirectories] = useState<Directory[]>([]);
+  const [selectedDestination, setSelectedDestination] = useState<string>('/');
+  const [showTorrentDialog, setShowTorrentDialog] = useState(false);
 
   useEffect(() => {
     loadFiles();
@@ -368,6 +376,85 @@ export default function FileManager({ userId }: FileManagerProps) {
     }
   };
 
+  const loadMoveDialogDirectories = async (path: string) => {
+    try {
+      const params = new URLSearchParams({
+        userId,
+        parentPath: path,
+      });
+
+      const response = await fetch(`/api/directories?${params}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setMoveDialogDirectories(data.directories);
+      }
+    } catch (error) {
+      console.error('Error loading move dialog directories:', error);
+    }
+  };
+
+  const handleMoveFile = async (file: FileItem) => {
+    setFileToMove(file);
+    setMoveDialogPath('/');
+    setSelectedDestination('/');
+    await loadMoveDialogDirectories('/');
+    setShowMoveDialog(true);
+  };
+
+  const navigateToMoveDialogDirectory = async (path: string) => {
+    setMoveDialogPath(path);
+    setSelectedDestination(path);
+    await loadMoveDialogDirectories(path);
+  };
+
+  const navigateMoveDialogUp = async () => {
+    if (moveDialogPath === '/') return;
+    const parts = moveDialogPath.split('/').filter(Boolean);
+    parts.pop();
+    const newPath = parts.length === 0 ? '/' : '/' + parts.join('/');
+    setMoveDialogPath(newPath);
+    setSelectedDestination(newPath);
+    await loadMoveDialogDirectories(newPath);
+  };
+
+  const handleConfirmMove = async () => {
+    if (!fileToMove) return;
+
+    if (selectedDestination === fileToMove.directory_path) {
+      toast.error('File is already in this directory');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/files', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileId: fileToMove.id,
+          userId,
+          newDirectoryPath: selectedDestination,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        loadFiles();
+        setShowMoveDialog(false);
+        setFileToMove(null);
+        toast.success('File moved successfully!');
+      } else {
+        toast.error(data.error || 'Move failed');
+      }
+    } catch (error) {
+      console.error('Error moving file:', error);
+      toast.error('Move failed');
+    }
+  };
+
   const navigateToDirectory = (path: string) => {
     setCurrentPath(path);
     setSearchQuery('');
@@ -429,6 +516,13 @@ export default function FileManager({ userId }: FileManagerProps) {
             >
               <FolderPlusIcon className="w-4 h-4" />
               New Folder
+            </button>
+            <button
+              onClick={() => setShowTorrentDialog(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm text-sm font-medium"
+            >
+              <ArrowDownTrayIcon className="w-4 h-4" />
+              Torrent
             </button>
             <label className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 cursor-pointer transition-all shadow-md hover:shadow-lg text-sm font-medium">
               <ArrowUpTrayIcon className="w-4 h-4" />
@@ -633,6 +727,13 @@ export default function FileManager({ userId }: FileManagerProps) {
                 </div>
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
                   <button
+                    onClick={() => handleMoveFile(file)}
+                    className="p-2 bg-white text-green-600 hover:bg-green-50 rounded-lg shadow-md transition-all"
+                    title="Move"
+                  >
+                    <ArrowRightIcon className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleDownloadFile(file.id, file.original_filename)}
                     className="p-2 bg-white text-indigo-600 hover:bg-indigo-50 rounded-lg shadow-md transition-all"
                     title="Download"
@@ -711,6 +812,13 @@ export default function FileManager({ userId }: FileManagerProps) {
                   </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleMoveFile(file)}
+                    className="p-2.5 text-green-600 hover:bg-green-50 rounded-xl transition-all"
+                    title="Move"
+                  >
+                    <ArrowRightIcon className="w-5 h-5" />
+                  </button>
                   <button
                     onClick={() => handleDownloadFile(file.id, file.original_filename)}
                     className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
@@ -792,7 +900,7 @@ export default function FileManager({ userId }: FileManagerProps) {
               placeholder="Folder name"
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl mb-6 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl mb-6 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all text-gray-900"
               onKeyPress={(e) => e.key === 'Enter' && handleCreateFolder()}
               autoFocus
             />
@@ -811,6 +919,122 @@ export default function FileManager({ userId }: FileManagerProps) {
                 className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg font-medium"
               >
                 Create Folder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Torrent Dialog */}
+      {showTorrentDialog && (
+        <TorrentDialog
+          userId={userId}
+          currentPath={currentPath}
+          onClose={() => setShowTorrentDialog(false)}
+          onDownloadComplete={() => {
+            loadFiles();
+            loadDirectories();
+          }}
+        />
+      )}
+
+      {/* Move File Dialog */}
+      {showMoveDialog && fileToMove && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl transform transition-all">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Move File</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Moving: <span className="font-semibold text-gray-900">{fileToMove.original_filename}</span>
+            </p>
+            
+            {/* Breadcrumb for move dialog */}
+            <div className="flex items-center gap-2 mb-4">
+              {moveDialogPath !== '/' && (
+                <button
+                  onClick={navigateMoveDialogUp}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ArrowLeftIcon className="w-4 h-4 text-gray-600" />
+                </button>
+              )}
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-500">Current:</span>
+                <span className="font-medium text-gray-900 bg-gray-100 px-3 py-1 rounded-lg">
+                  {moveDialogPath}
+                </span>
+              </div>
+            </div>
+
+            {/* Select current directory button */}
+            <button
+              onClick={() => setSelectedDestination(moveDialogPath)}
+              className={`w-full flex items-center gap-3 p-3 mb-2 rounded-xl border-2 transition-all ${
+                selectedDestination === moveDialogPath
+                  ? 'bg-green-50 border-green-500'
+                  : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className={`p-2 rounded-lg ${
+                selectedDestination === moveDialogPath ? 'bg-green-100' : 'bg-white'
+              }`}>
+                <FolderIcon className={`w-5 h-5 ${
+                  selectedDestination === moveDialogPath ? 'text-green-600' : 'text-gray-600'
+                }`} />
+              </div>
+              <div className="flex-1 text-left">
+                <div className={`font-semibold ${
+                  selectedDestination === moveDialogPath ? 'text-green-900' : 'text-gray-900'
+                }`}>
+                  Move to this folder
+                </div>
+                <div className="text-xs text-gray-500">{moveDialogPath}</div>
+              </div>
+              {selectedDestination === moveDialogPath && (
+                <div className="w-2 h-2 bg-green-600 rounded-full flex-shrink-0"></div>
+              )}
+            </button>
+
+            <p className="text-sm text-gray-500 mb-2">Or navigate to a subfolder:</p>
+            
+            {/* Directory list */}
+            <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl mb-6">
+              {moveDialogDirectories.length > 0 ? (
+                moveDialogDirectories.map((dir) => (
+                  <button
+                    key={dir.id}
+                    onClick={() => navigateToMoveDialogDirectory(dir.path)}
+                    className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-all"
+                  >
+                    <FolderIcon className="w-5 h-5 flex-shrink-0 text-yellow-500" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 truncate">{dir.name}</div>
+                      <div className="text-xs text-gray-500 truncate">{dir.path}</div>
+                    </div>
+                    <ArrowRightIcon className="w-4 h-4 text-gray-400" />
+                  </button>
+                ))
+              ) : (
+                <div className="p-6 text-center text-gray-500 text-sm">
+                  No subfolders in this directory
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowMoveDialog(false);
+                  setFileToMove(null);
+                }}
+                className="px-5 py-2.5 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmMove}
+                className="px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg font-medium"
+              >
+                Move File
               </button>
             </div>
           </div>

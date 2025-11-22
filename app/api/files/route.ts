@@ -58,6 +58,51 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// PATCH - Move a file to a different directory
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { fileId, userId, newDirectoryPath } = body;
+
+    if (!fileId || !userId || newDirectoryPath === undefined) {
+      return NextResponse.json(
+        { error: 'fileId, userId, and newDirectoryPath are required' },
+        { status: 400 }
+      );
+    }
+
+    // Verify file exists and belongs to user
+    const fileResult = await pool.query(
+      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+      [fileId, userId]
+    );
+
+    if (fileResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: 'File not found' },
+        { status: 404 }
+      );
+    }
+
+    // Update file's directory path
+    await pool.query(
+      'UPDATE files SET directory_path = $1 WHERE id = $2',
+      [newDirectoryPath, fileId]
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: 'File moved successfully',
+    });
+  } catch (error) {
+    console.error('Error moving file:', error);
+    return NextResponse.json(
+      { error: 'Failed to move file' },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE - Remove a file
 export async function DELETE(request: NextRequest) {
   try {

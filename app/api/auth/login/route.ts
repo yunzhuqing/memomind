@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     // Find user
     const result = await pool.query(
-      'SELECT id, email, password, name FROM users WHERE email = $1',
+      'SELECT id, email, password, name, role FROM users WHERE email = $1',
       [email]
     );
 
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
         id: user.id.toString(),
         email: user.email,
         name: user.name,
+        role: user.role,
       },
     });
   } catch (error) {

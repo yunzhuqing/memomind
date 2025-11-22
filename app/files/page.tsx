@@ -29,8 +29,10 @@ export default function FilesPage() {
       <AppHeader activeTab="files" onTabChange={(tab) => {
         if (tab === 'notes') {
           router.push('/notebook');
-        } else {
+        } else if (tab === 'files') {
           router.push('/files');
+        } else if (tab === 'admin') {
+          router.push('/admin');
         }
       }} />
 

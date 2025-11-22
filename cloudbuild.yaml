@@ -1,14 +1,18 @@
 steps:
   # Step 1: Install dependencies
   - name: 'node:23.11.1-alpine3.22'
-    entrypoint: npm
-    args: ['install']
+    entrypoint: sh
+    args:
+      - '-c'
+      - 'apk add --no-cache ffmpeg && npm install'
     id: 'install-dependencies'
 
   # Step 2: Build the Next.js application
   - name: 'node:23.11.1-alpine3.22'
-    entrypoint: npm
-    args: ['run', 'build']
+    entrypoint: sh
+    args:
+      - '-c'
+      - 'apk add --no-cache ffmpeg && npm run build'
     id: 'build-app'
     waitFor: ['install-dependencies']
     env:
