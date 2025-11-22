@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteFileFromS3 } from '@/lib/s3';
-import pool from '@/lib/db';
+import Database from '@/lib/database';
+import { mapFileToResponse } from '@/lib/entityMappers';
 
 // GET - List files with optional search and directory filter
 export async function GET(request: NextRequest) {
@@ -18,36 +19,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let query = 'SELECT * FROM files WHERE user_id = $1';
-    const params: any[] = [userId];
-    let paramIndex = 2;
-
-    // Filter by directory
-    query += ` AND directory_path = $${paramIndex}`;
-    params.push(directoryPath);
-    paramIndex++;
-
-    // Search filter
-    if (search) {
-      query += ` AND (original_filename ILIKE $${paramIndex} OR filename ILIKE $${paramIndex})`;
-      params.push(`%${search}%`);
-      paramIndex++;
-    }
-
-    // File type filter
-    if (fileType && fileType !== 'all') {
-      query += ` AND file_type = $${paramIndex}`;
-      params.push(fileType);
-      paramIndex++;
-    }
-
-    query += ' ORDER BY created_at DESC';
-
-    const result = await pool.query(query, params);
+    const files = await Database.findFiles(parseInt(userId), {
+      directoryPath,
+      ...(search && { search }),
+      ...(fileType && fileType !== 'all' && { fileType }),
+    });
 
     return NextResponse.json({
       success: true,
-      files: result.rows,
+      files: files.map(mapFileToResponse),
     });
   } catch (error) {
     console.error('Error fetching files:', error);
@@ -72,12 +52,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Verify file exists and belongs to user
-    const fileResult = await pool.query(
-      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
-      [fileId, userId]
-    );
+    const file = await Database.findFileById(parseInt(fileId), parseInt(userId));
 
-    if (fileResult.rows.length === 0) {
+    if (!file) {
       return NextResponse.json(
         { error: 'File not found' },
         { status: 404 }
@@ -85,10 +62,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Update file's directory path
-    await pool.query(
-      'UPDATE files SET directory_path = $1 WHERE id = $2',
-      [newDirectoryPath, fileId]
-    );
+    await Database.updateFile(parseInt(fileId), parseInt(userId), {
+      directoryPath: newDirectoryPath,
+    });
 
     return NextResponse.json({
       success: true,
@@ -118,30 +94,25 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get file info
-    const fileResult = await pool.query(
-      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
-      [fileId, userId]
-    );
+    const file = await Database.findFileById(parseInt(fileId), parseInt(userId));
 
-    if (fileResult.rows.length === 0) {
+    if (!file) {
       return NextResponse.json(
         { error: 'File not found' },
         { status: 404 }
       );
     }
 
-    const file = fileResult.rows[0];
-
     // Delete file from S3
     try {
-      await deleteFileFromS3({ key: file.file_path });
+      await deleteFileFromS3({ key: file.filePath });
     } catch (error) {
       console.error('Error deleting file from S3:', error);
       // Continue even if file doesn't exist in S3
     }
 
     // Delete from database
-    await pool.query('DELETE FROM files WHERE id = $1', [fileId]);
+    await Database.deleteFile(parseInt(fileId), parseInt(userId));
 
     return NextResponse.json({
       success: true,

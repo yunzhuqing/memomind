@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import { uploadFileToS3, generateS3Key } from '@/lib/s3';
-import pool from '@/lib/db';
+import Database from '@/lib/database';
 import { getFileType } from '@/lib/fileUtils';
 import { generateThumbnail } from '@/lib/thumbnailGenerator';
+import { mapFileToResponse } from '@/lib/entityMappers';
 
 export async function POST(request: NextRequest) {
+  let taskId: number | null = null;
+  
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
@@ -18,6 +21,17 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Create task record
+    const task = await Database.createTask({
+      userId: parseInt(userId),
+      type: 'upload',
+      name: file.name,
+      status: 'processing',
+      totalSize: file.size,
+      filePath: directoryPath,
+    });
+    taskId = task.id;
 
     // Generate unique filename
     const timestamp = Date.now();
@@ -65,32 +79,54 @@ export async function POST(request: NextRequest) {
     }
 
     // Save file metadata to database
-    const result = await pool.query(
-      `INSERT INTO files (user_id, filename, original_filename, file_path, file_type, file_size, mime_type, directory_path, thumbnail_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
-      [
-        userId,
-        filename,
-        originalName,
-        s3Key, // Store S3 key instead of local path
-        fileType,
-        file.size,
-        file.type,
-        directoryPath,
-        thumbnailKey,
-      ]
-    );
+    const fileRecord = await Database.createFile({
+      userId: parseInt(userId),
+      filename,
+      originalFilename: originalName,
+      filePath: s3Key, // Store S3 key instead of local path
+      fileType,
+      fileSize: file.size,
+      mimeType: file.type,
+      directoryPath,
+      thumbnailKey: thumbnailKey || undefined,
+    });
+
+    // Update task as completed
+    if (taskId) {
+      await Database.updateTask(taskId, parseInt(userId), {
+        status: 'completed',
+        progress: 100,
+        downloadedSize: file.size,
+      });
+    }
 
     return NextResponse.json({
       success: true,
       file: {
-        ...result.rows[0],
+        ...mapFileToResponse(fileRecord),
         s3_url: s3Url,
       },
+      taskId,
     });
   } catch (error) {
     console.error('File upload error:', error);
+    
+    // Update task as failed
+    if (taskId) {
+      try {
+        const formData = await request.formData();
+        const userId = formData.get('userId') as string;
+        if (userId) {
+          await Database.updateTask(taskId, parseInt(userId), {
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      } catch (updateError) {
+        console.error('Failed to update task status:', updateError);
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Failed to upload file' },
       { status: 500 }

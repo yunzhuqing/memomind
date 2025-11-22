@@ -21,7 +21,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       magnetUri, 
       torrentFile, 
       selectedFiles, 
-      directoryPath = '/' 
+      directoryPath = '/',
+      torrentName = 'Unknown Torrent'
     } = body;
 
     if (!userId) {
@@ -37,6 +38,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 }
       );
     }
+
+    // Parse torrent to get info
+    let torrentInfo: any;
+    try {
+      const torrentSource = torrentFile 
+        ? Buffer.from(torrentFile, 'base64')
+        : magnetUri;
+      torrentInfo = await parseTorrent(torrentSource);
+    } catch (error) {
+      console.error('Error parsing torrent:', error);
+    }
+
+    // Create task record
+    const taskResult = await pool.query(
+      `INSERT INTO tasks 
+        (user_id, type, name, status, file_path, metadata) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING id`,
+      [
+        userId,
+        'torrent',
+        torrentInfo?.name || torrentName,
+        'processing',
+        directoryPath,
+        JSON.stringify({
+          infoHash: torrentInfo?.infoHash,
+          magnetUri: magnetUri || null,
+          selectedFiles: selectedFiles || [],
+        })
+      ]
+    );
+
+    const taskId = taskResult.rows[0].id;
 
     // Create a unique session ID for this download
     const sessionId = `torrent_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -55,6 +89,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       engine.on('ready', async () => {
         try {
+          // Update task with total size
+          const totalSize = engine.torrent?.length || 0;
+          if (totalSize > 0) {
+            await pool.query(
+              'UPDATE tasks SET total_size = $1 WHERE id = $2',
+              [totalSize, taskId]
+            );
+          }
+
           const downloadedFiles: any[] = [];
           
           // Get files to download
@@ -124,6 +167,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             });
           }
 
+          // Update task as completed
+          await pool.query(
+            `UPDATE tasks 
+             SET status = $1, progress = $2, downloaded_size = $3
+             WHERE id = $4`,
+            ['completed', 100, totalSize, taskId]
+          );
+
           // Clean up
           engine.destroy(() => {
             torrentEngines.delete(sessionId);
@@ -133,12 +184,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             NextResponse.json({
               success: true,
               sessionId,
+              taskId,
               files: downloadedFiles,
               message: `Downloaded ${downloadedFiles.length} file(s)`,
             })
           );
         } catch (error) {
           console.error('Error in torrent download:', error);
+          
+          // Update task as failed
+          await pool.query(
+            `UPDATE tasks 
+             SET status = $1, error_message = $2
+             WHERE id = $3`,
+            ['failed', error instanceof Error ? error.message : 'Unknown error', taskId]
+          );
+
           engine.destroy(() => {
             torrentEngines.delete(sessionId);
           });
@@ -152,8 +213,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         }
       });
 
-      engine.on('error', (error: Error) => {
+      engine.on('error', async (error: Error) => {
         console.error('Engine error:', error);
+        
+        // Update task as failed
+        await pool.query(
+          `UPDATE tasks 
+           SET status = $1, error_message = $2
+           WHERE id = $3`,
+          ['failed', error.message, taskId]
+        );
+
         engine.destroy(() => {
           torrentEngines.delete(sessionId);
         });

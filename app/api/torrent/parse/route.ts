@@ -47,6 +47,9 @@ export async function POST(request: NextRequest) {
       }];
     }
 
+    // For magnet URIs, file information is not available until connected to peers
+    const isMagnetUri = !file && magnetUri && magnetUri.trim().length > 0;
+
     return NextResponse.json({
       success: true,
       torrent: {
@@ -55,6 +58,12 @@ export async function POST(request: NextRequest) {
         length: torrentData.length || 0,
         files,
         announce: torrentData.announce || [],
+        // Indicate if this is from a magnet URI (file info not available)
+        isMagnetUri,
+        // Note for magnet URIs
+        note: isMagnetUri && files.length === 0 
+          ? 'File information is not available in magnet URIs. Connect to peers to retrieve file details.'
+          : undefined,
       },
     });
   } catch (error) {

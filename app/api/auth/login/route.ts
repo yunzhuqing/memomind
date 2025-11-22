@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
-import pool from '@/lib/db';
+import Database from '@/lib/database';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,19 +15,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user
-    const result = await pool.query(
-      'SELECT id, email, password, name, role FROM users WHERE email = $1',
-      [email]
-    );
+    const user = await Database.findUserByEmail(email);
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
-
-    const user = result.rows[0];
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password);
@@ -44,7 +39,7 @@ export async function POST(request: NextRequest) {
         id: user.id.toString(),
         email: user.email,
         name: user.name,
-        role: user.role,
+        role: user.role || 'user',
       },
     });
   } catch (error) {

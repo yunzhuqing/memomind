@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pool from '@/lib/db';
+import Database from '@/lib/database';
 
 // GET all notes for a user
 export async function GET(request: NextRequest) {
@@ -13,20 +13,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const result = await pool.query(
-      'SELECT id, title, content, created_at, updated_at FROM notes WHERE user_id = $1 ORDER BY updated_at DESC',
-      [userId]
-    );
+    const notes = await Database.findNotes(parseInt(userId));
 
-    const notes = result.rows.map((note) => ({
-      id: note.id.toString(),
-      title: note.title,
-      content: note.content,
-      createdAt: note.created_at.toISOString(),
-      updatedAt: note.updated_at.toISOString(),
-    }));
-
-    return NextResponse.json({ notes });
+    return NextResponse.json({
+      notes: notes.map((note) => ({
+        id: note.id.toString(),
+        title: note.title,
+        content: note.content,
+        createdAt: note.createdAt.toISOString(),
+        updatedAt: note.updatedAt.toISOString(),
+      })),
+    });
   } catch (error) {
     console.error('Get notes error:', error);
     return NextResponse.json(
@@ -57,20 +54,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await pool.query(
-      'INSERT INTO notes (user_id, title, content) VALUES ($1, $2, $3) RETURNING id, title, content, created_at, updated_at',
-      [userId, title, content || '']
-    );
-
-    const note = result.rows[0];
+    const note = await Database.createNote({
+      userId: parseInt(userId),
+      title,
+      content: content || '',
+    });
 
     return NextResponse.json({
       note: {
         id: note.id.toString(),
         title: note.title,
         content: note.content,
-        createdAt: note.created_at.toISOString(),
-        updatedAt: note.updated_at.toISOString(),
+        createdAt: note.createdAt.toISOString(),
+        updatedAt: note.updatedAt.toISOString(),
       },
     });
   } catch (error) {
@@ -103,27 +99,34 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const result = await pool.query(
-      'UPDATE notes SET title = $1, content = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 AND user_id = $4 RETURNING id, title, content, created_at, updated_at',
-      [title, content || '', id, userId]
-    );
+    const updated = await Database.updateNote(parseInt(id), parseInt(userId), {
+      title,
+      content: content || '',
+    });
 
-    if (result.rows.length === 0) {
+    if (!updated) {
       return NextResponse.json(
         { error: 'Note not found' },
         { status: 404 }
       );
     }
 
-    const note = result.rows[0];
+    const note = await Database.findNoteById(parseInt(id), parseInt(userId));
+
+    if (!note) {
+      return NextResponse.json(
+        { error: 'Note not found' },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({
       note: {
         id: note.id.toString(),
         title: note.title,
         content: note.content,
-        createdAt: note.created_at.toISOString(),
-        updatedAt: note.updated_at.toISOString(),
+        createdAt: note.createdAt.toISOString(),
+        updatedAt: note.updatedAt.toISOString(),
       },
     });
   } catch (error) {
@@ -157,12 +160,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const result = await pool.query(
-      'DELETE FROM notes WHERE id = $1 AND user_id = $2 RETURNING id',
-      [noteId, userId]
-    );
+    const deleted = await Database.deleteNote(parseInt(noteId), parseInt(userId));
 
-    if (result.rows.length === 0) {
+    if (!deleted) {
       return NextResponse.json(
         { error: 'Note not found' },
         { status: 404 }

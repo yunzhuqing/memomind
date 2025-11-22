@@ -24,6 +24,8 @@ interface TorrentInfo {
   length: number;
   files: TorrentFile[];
   announce: string[];
+  isMagnetUri?: boolean;
+  note?: string;
 }
 
 interface TorrentDialogProps {
@@ -71,9 +73,16 @@ export default function TorrentDialog({
 
       if (data.success) {
         setTorrentInfo(data.torrent);
-        // Select all files by default
-        setSelectedFiles(data.torrent.files.map((_: any, index: number) => index));
-        toast.success('Torrent parsed successfully!');
+        // Select all files by default (if files are available)
+        if (data.torrent.files && data.torrent.files.length > 0) {
+          setSelectedFiles(data.torrent.files.map((_: any, index: number) => index));
+        }
+        
+        if (data.torrent.isMagnetUri && data.torrent.files.length === 0) {
+          toast.success('Magnet URI parsed! File info will be retrieved when download starts.');
+        } else {
+          toast.success('Torrent parsed successfully!');
+        }
       } else {
         toast.error(data.error || 'Failed to parse torrent');
       }
@@ -88,7 +97,8 @@ export default function TorrentDialog({
   const handleDownload = async () => {
     if (!torrentInfo) return;
 
-    if (selectedFiles.length === 0) {
+    // For magnet URIs without file info, allow download without file selection
+    if (!torrentInfo.isMagnetUri && selectedFiles.length === 0) {
       toast.error('Please select at least one file to download');
       return;
     }
@@ -112,6 +122,7 @@ export default function TorrentDialog({
           torrentFile: torrentFileBase64,
           selectedFiles,
           directoryPath: currentPath,
+          torrentName: torrentInfo?.name || 'Unknown Torrent',
         }),
       });
 
@@ -267,58 +278,77 @@ export default function TorrentDialog({
               <h4 className="font-semibold text-gray-900 mb-2">{torrentInfo.name}</h4>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-gray-600">Total Size:</span>
-                  <span className="ml-2 font-medium text-gray-900">
-                    {formatFileSize(torrentInfo.length)}
+                  <span className="text-gray-600">Info Hash:</span>
+                  <span className="ml-2 font-mono text-xs text-gray-900">
+                    {torrentInfo.infoHash.substring(0, 16)}...
                   </span>
                 </div>
                 <div>
                   <span className="text-gray-600">Files:</span>
                   <span className="ml-2 font-medium text-gray-900">
-                    {torrentInfo.files.length}
+                    {torrentInfo.files.length > 0 ? torrentInfo.files.length : 'Unknown'}
                   </span>
                 </div>
               </div>
+              {torrentInfo.note && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-xs text-yellow-800">{torrentInfo.note}</p>
+                </div>
+              )}
             </div>
 
-            {/* File Selection */}
-            <div className="flex items-center justify-between mb-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFiles.length === torrentInfo.files.length}
-                  onChange={toggleSelectAll}
-                  className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                />
-                <span className="text-sm font-medium text-gray-700">
-                  Select All ({selectedFiles.length}/{torrentInfo.files.length})
-                </span>
-              </label>
-            </div>
+            {torrentInfo.files.length > 0 ? (
+              <>
+                {/* File Selection */}
+                <div className="flex items-center justify-between mb-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedFiles.length === torrentInfo.files.length}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Select All ({selectedFiles.length}/{torrentInfo.files.length})
+                    </span>
+                  </label>
+                </div>
 
-            {/* File List */}
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-xl mb-4">
-              {torrentInfo.files.map((file) => (
-                <label
-                  key={file.index}
-                  className="flex items-center gap-3 p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedFiles.includes(file.index)}
-                    onChange={() => toggleFileSelection(file.index)}
-                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 flex-shrink-0"
-                  />
-                  <DocumentIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 truncate text-sm">
-                      {file.name}
-                    </div>
-                    <div className="text-xs text-gray-500">{formatFileSize(file.length)}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
+                {/* File List */}
+                <div className="flex-1 overflow-y-auto border border-gray-200 rounded-xl mb-4">
+                  {torrentInfo.files.map((file) => (
+                    <label
+                      key={file.index}
+                      className="flex items-center gap-3 p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedFiles.includes(file.index)}
+                        onChange={() => toggleFileSelection(file.index)}
+                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 flex-shrink-0"
+                      />
+                      <DocumentIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 truncate text-sm">
+                          {file.name}
+                        </div>
+                        <div className="text-xs text-gray-500">{formatFileSize(file.length)}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center border border-gray-200 rounded-xl mb-4 p-8">
+                <div className="text-center">
+                  <LinkIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-600 mb-1">Magnet URI Ready</p>
+                  <p className="text-xs text-gray-500">
+                    File information will be retrieved when download starts
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-3 justify-end">
@@ -330,11 +360,16 @@ export default function TorrentDialog({
               </button>
               <button
                 onClick={handleDownload}
-                disabled={downloading || selectedFiles.length === 0}
+                disabled={downloading || (!torrentInfo.isMagnetUri && selectedFiles.length === 0)}
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all shadow-md hover:shadow-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ArrowDownTrayIcon className="w-5 h-5" />
-                {downloading ? 'Downloading...' : `Download (${selectedFiles.length})`}
+                {downloading 
+                  ? 'Downloading...' 
+                  : torrentInfo.isMagnetUri && torrentInfo.files.length === 0
+                    ? 'Start Download'
+                    : `Download (${selectedFiles.length})`
+                }
               </button>
             </div>
           </div>

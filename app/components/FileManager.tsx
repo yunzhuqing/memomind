@@ -18,10 +18,12 @@ import {
   Squares2X2Icon,
   ListBulletIcon,
   XMarkIcon,
-  ArrowRightIcon
+  ArrowRightIcon,
+  LinkIcon
 } from '@heroicons/react/24/outline';
 import TaskCenter, { UploadTask } from './TaskCenter';
 import TorrentDialog from './TorrentDialog';
+import UrlDownloadDialog from './UrlDownloadDialog';
 
 interface FileItem {
   id: number;
@@ -62,6 +64,7 @@ export default function FileManager({ userId }: FileManagerProps) {
   const [moveDialogDirectories, setMoveDialogDirectories] = useState<Directory[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>('/');
   const [showTorrentDialog, setShowTorrentDialog] = useState(false);
+  const [showUrlDownloadDialog, setShowUrlDownloadDialog] = useState(false);
 
   useEffect(() => {
     loadFiles();
@@ -518,6 +521,13 @@ export default function FileManager({ userId }: FileManagerProps) {
               New Folder
             </button>
             <button
+              onClick={() => setShowUrlDownloadDialog(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm text-sm font-medium"
+            >
+              <LinkIcon className="w-4 h-4" />
+              URL
+            </button>
+            <button
               onClick={() => setShowTorrentDialog(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm text-sm font-medium"
             >
@@ -851,7 +861,7 @@ export default function FileManager({ userId }: FileManagerProps) {
       </div>
 
       {/* Task Center */}
-      <TaskCenter tasks={uploadTasks} onRemoveTask={handleRemoveTask} />
+      <TaskCenter tasks={uploadTasks} onRemoveTask={handleRemoveTask} userId={userId} />
 
       {/* Media Preview Modal */}
       {previewFile && (
@@ -923,6 +933,19 @@ export default function FileManager({ userId }: FileManagerProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* URL Download Dialog */}
+      {showUrlDownloadDialog && (
+        <UrlDownloadDialog
+          userId={userId}
+          currentPath={currentPath}
+          onClose={() => setShowUrlDownloadDialog(false)}
+          onDownloadComplete={() => {
+            loadFiles();
+            loadDirectories();
+          }}
+        />
       )}
 
       {/* Torrent Dialog */}

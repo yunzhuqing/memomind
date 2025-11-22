@@ -8,9 +8,10 @@ import {
   abortMultipartUpload,
   listUploadedParts
 } from '@/lib/s3';
-import pool from '@/lib/db';
+import Database from '@/lib/database';
 import { getFileType } from '@/lib/fileUtils';
 import { generateThumbnailFromS3 } from '@/lib/thumbnailGenerator';
+import { mapFileToResponse } from '@/lib/entityMappers';
 
 // Store upload sessions in memory (in production, use Redis or database)
 const uploadSessions = new Map<string, {
@@ -24,6 +25,7 @@ const uploadSessions = new Map<string, {
   mimeType: string;
   totalSize: number;
   directoryPath: string;
+  taskId?: number;
 }>();
 
 export async function POST(request: NextRequest) {
@@ -65,6 +67,17 @@ export async function POST(request: NextRequest) {
       // Check for existing parts (for resume)
       const uploadedParts = await listUploadedParts(s3Key, uploadId);
 
+      // Create task record
+      const task = await Database.createTask({
+        userId: parseInt(userId),
+        type: 'upload',
+        name: filename,
+        status: 'processing',
+        totalSize,
+        filePath: directoryPath,
+      });
+      const taskId = task.id;
+
       // Create session
       const sessionId = `${userId}_${timestamp}`;
       uploadSessions.set(sessionId, {
@@ -78,6 +91,7 @@ export async function POST(request: NextRequest) {
         mimeType: fileType,
         totalSize,
         directoryPath,
+        taskId,
       });
 
       return NextResponse.json({
@@ -87,6 +101,7 @@ export async function POST(request: NextRequest) {
         chunkSize: CHUNK_SIZE,
         totalChunks,
         uploadedParts, // Return already uploaded parts for resume
+        taskId,
       });
     }
 
@@ -125,6 +140,16 @@ export async function POST(request: NextRequest) {
 
       // Store part info
       session.parts.push({ PartNumber: partNumber, ETag: etag });
+
+      // Update task progress
+      if (session.taskId) {
+        const uploadedSize = session.parts.length * 40 * 1024 * 1024; // Approximate
+        const progress = Math.min(99, Math.round((uploadedSize / session.totalSize) * 100));
+        await Database.updateTask(session.taskId, parseInt(session.userId), {
+          progress,
+          downloadedSize: uploadedSize,
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -187,22 +212,26 @@ export async function POST(request: NextRequest) {
       // thumbnails on the client side for large images if needed.
 
       // Save file metadata to database
-      const result = await pool.query(
-        `INSERT INTO files (user_id, filename, original_filename, file_path, file_type, file_size, mime_type, directory_path, thumbnail_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING *`,
-        [
-          session.userId,
-          session.filename,
-          session.originalFilename,
-          session.key,
-          session.fileType,
-          session.totalSize,
-          session.mimeType,
-          session.directoryPath,
-          thumbnailKey,
-        ]
-      );
+      const fileRecord = await Database.createFile({
+        userId: parseInt(session.userId),
+        filename: session.filename,
+        originalFilename: session.originalFilename,
+        filePath: session.key,
+        fileType: session.fileType,
+        fileSize: session.totalSize,
+        mimeType: session.mimeType,
+        directoryPath: session.directoryPath,
+        thumbnailKey: thumbnailKey || undefined,
+      });
+
+      // Update task as completed
+      if (session.taskId) {
+        await Database.updateTask(session.taskId, parseInt(session.userId), {
+          status: 'completed',
+          progress: 100,
+          downloadedSize: session.totalSize,
+        });
+      }
 
       // Clean up session
       uploadSessions.delete(sessionId);
@@ -210,9 +239,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         file: {
-          ...result.rows[0],
+          ...mapFileToResponse(fileRecord),
           s3_url: s3Url,
         },
+        taskId: session.taskId,
       });
     }
 
@@ -242,6 +272,24 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Chunk upload error:', error);
+    
+    // Try to update task as failed if we have session info
+    try {
+      const formData = await request.formData();
+      const sessionId = formData.get('sessionId') as string;
+      if (sessionId) {
+        const session = uploadSessions.get(sessionId);
+        if (session?.taskId) {
+          await Database.updateTask(session.taskId, parseInt(session.userId), {
+            status: 'failed',
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+    } catch (updateError) {
+      console.error('Failed to update task status:', updateError);
+    }
+    
     return NextResponse.json(
       { error: 'Failed to process chunk upload' },
       { status: 500 }

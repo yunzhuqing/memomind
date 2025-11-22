@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { XMarkIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, ChevronDownIcon, ChevronUpIcon, ListBulletIcon } from '@heroicons/react/24/outline';
+import TaskList from './TaskList';
 
 export interface UploadTask {
   id: string;
@@ -16,49 +17,102 @@ export interface UploadTask {
 interface TaskCenterProps {
   tasks: UploadTask[];
   onRemoveTask: (taskId: string) => void;
+  userId?: string;
 }
 
-export default function TaskCenter({ tasks, onRemoveTask }: TaskCenterProps) {
+export default function TaskCenter({ tasks, onRemoveTask, userId }: TaskCenterProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
-  if (tasks.length === 0) return null;
+  // Show task center if there are upload tasks OR if user wants to see all tasks
+  if (tasks.length === 0 && !showAllTasks) {
+    // Show a small button to open all tasks
+    if (userId) {
+      return (
+        <button
+          onClick={() => setShowAllTasks(true)}
+          className="fixed bottom-4 right-4 bg-indigo-600 text-white p-3 rounded-full shadow-lg hover:bg-indigo-700 transition-colors z-50"
+          title="View all tasks"
+        >
+          <ListBulletIcon className="w-6 h-6" />
+        </button>
+      );
+    }
+    return null;
+  }
 
   const activeTasks = tasks.filter(t => t.status === 'uploading');
   const completedTasks = tasks.filter(t => t.status === 'completed');
   const failedTasks = tasks.filter(t => t.status === 'failed');
 
   return (
-    <div className="fixed bottom-4 right-4 w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50">
+    <div className="fixed bottom-4 right-4 w-96 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 max-h-[80vh] flex flex-col">
       {/* Header */}
       <div 
-        className="flex items-center justify-between p-4 border-b cursor-pointer hover:bg-gray-50"
+        className="flex items-center justify-between p-4 border-b cursor-pointer hover:bg-gray-50 flex-shrink-0"
         onClick={() => setIsMinimized(!isMinimized)}
       >
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold text-gray-900">Upload Tasks</h3>
-          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">
-            {activeTasks.length} active
-          </span>
-        </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsMinimized(!isMinimized);
-          }}
-          className="text-gray-500 hover:text-gray-700"
-        >
-          {isMinimized ? (
-            <ChevronUpIcon className="w-5 h-5" />
-          ) : (
-            <ChevronDownIcon className="w-5 h-5" />
+          <h3 className="font-semibold text-gray-900">
+            {showAllTasks ? 'All Tasks' : 'Upload Tasks'}
+          </h3>
+          {activeTasks.length > 0 && (
+            <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">
+              {activeTasks.length} active
+            </span>
           )}
-        </button>
+        </div>
+        <div className="flex items-center gap-2">
+          {userId && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAllTasks(!showAllTasks);
+              }}
+              className="text-gray-500 hover:text-gray-700 p-1"
+              title={showAllTasks ? 'Show upload tasks' : 'Show all tasks'}
+            >
+              <ListBulletIcon className="w-5 h-5" />
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMinimized(!isMinimized);
+            }}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            {isMinimized ? (
+              <ChevronUpIcon className="w-5 h-5" />
+            ) : (
+              <ChevronDownIcon className="w-5 h-5" />
+            )}
+          </button>
+          {showAllTasks && tasks.length === 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAllTasks(false);
+              }}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Task List */}
       {!isMinimized && (
-        <div className="max-h-96 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
+          {/* Show all tasks from database */}
+          {showAllTasks && userId ? (
+            <div className="p-4">
+              <TaskList userId={userId} />
+            </div>
+          ) : (
+            <>
           {/* Active Tasks */}
           {activeTasks.length > 0 && (
             <div className="p-4 space-y-3">
@@ -162,6 +216,8 @@ export default function TaskCenter({ tasks, onRemoveTask }: TaskCenterProps) {
                 </div>
               ))}
             </div>
+          )}
+            </>
           )}
         </div>
       )}

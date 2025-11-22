@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
-import pool from '@/lib/db';
+import Database from '@/lib/database';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,12 +19,9 @@ export async function POST(request: NextRequest) {
     const userRole = role && validRoles.includes(role) ? role : 'user';
 
     // Check if user already exists
-    const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
-    );
+    const existingUser = await Database.findUserByEmail(email);
 
-    if (existingUser.rows.length > 0) {
+    if (existingUser) {
       return NextResponse.json(
         { error: 'User already exists' },
         { status: 409 }
@@ -34,13 +31,15 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert new user with new fields
-    const result = await pool.query(
-      'INSERT INTO users (email, password, name, role, team_id, address) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, name, role, team_id, address, created_at',
-      [email, hashedPassword, name, userRole, team_id || null, address || null]
-    );
-
-    const user = result.rows[0];
+    // Create new user
+    const user = await Database.createUser({
+      email,
+      password: hashedPassword,
+      name,
+      role: userRole,
+      teamId: team_id || undefined,
+      address: address || undefined,
+    });
 
     return NextResponse.json({
       user: {
@@ -48,7 +47,7 @@ export async function POST(request: NextRequest) {
         email: user.email,
         name: user.name,
         role: user.role,
-        team_id: user.team_id,
+        team_id: user.teamId,
         address: user.address,
       },
     });
