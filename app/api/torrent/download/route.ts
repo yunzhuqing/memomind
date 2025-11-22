@@ -90,7 +90,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       engine.on('ready', async () => {
         try {
           // Update task with total size
-          const totalSize = engine.torrent?.length || 0;
+          // Calculate total size from all files
+          const totalSize = engine.files.reduce((sum: number, file: any) => sum + file.length, 0);
           if (totalSize > 0) {
             await pool.query(
               'UPDATE tasks SET total_size = $1 WHERE id = $2',
@@ -270,9 +271,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Calculate total size from all files
+    const totalSize = engine.files.reduce((sum: number, file: any) => sum + file.length, 0);
+    
     return NextResponse.json({
       success: true,
-      progress: engine.swarm ? engine.swarm.downloaded / engine.torrent.length : 0,
+      progress: engine.swarm && totalSize > 0 ? engine.swarm.downloaded / totalSize : 0,
       downloadSpeed: engine.swarm ? engine.swarm.downloadSpeed() : 0,
       uploadSpeed: engine.swarm ? engine.swarm.uploadSpeed() : 0,
       numPeers: engine.swarm ? engine.swarm.wires.length : 0,
