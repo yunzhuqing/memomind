@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import WebTorrent from 'webtorrent';
 import parseTorrent from 'parse-torrent';
 import pool from '@/lib/db';
 import { uploadFileToS3, generateS3Key } from '@/lib/s3';
@@ -9,13 +8,12 @@ import { promisify } from 'util';
 
 const mkdir = promisify(fs.mkdir);
 const writeFile = promisify(fs.writeFile);
-const readFile = promisify(fs.readFile);
 const unlink = promisify(fs.unlink);
 
-// Store active torrent clients
-const torrentClients = new Map<string, WebTorrent.Instance>();
+// Store active torrent engines
+const torrentEngines = new Map<string, any>();
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json();
     const { 
@@ -43,63 +41,50 @@ export async function POST(request: NextRequest) {
     // Create a unique session ID for this download
     const sessionId = `torrent_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // Parse torrent to get info
-    let torrentInfo;
-    if (torrentFile) {
-      const buffer = Buffer.from(torrentFile, 'base64');
-      torrentInfo = await parseTorrent(buffer);
-    } else {
-      torrentInfo = await parseTorrent(magnetUri);
-    }
-
-    // Create WebTorrent client
-    const client = new WebTorrent();
-    torrentClients.set(sessionId, client);
+    // Dynamically import torrent-stream
+    const torrentStream = (await import('torrent-stream')).default;
 
     // Add torrent
     const torrentSource = torrentFile 
       ? Buffer.from(torrentFile, 'base64')
       : magnetUri;
 
-    return new Promise((resolve) => {
-      client.add(torrentSource, { path: `/tmp/${sessionId}` }, async (torrent) => {
+    return new Promise<NextResponse>((resolve) => {
+      const engine = torrentStream(torrentSource);
+      torrentEngines.set(sessionId, engine);
+
+      engine.on('ready', async () => {
         try {
-          // Filter files based on selection
+          const downloadedFiles: any[] = [];
+          
+          // Get files to download
           const filesToDownload = selectedFiles && selectedFiles.length > 0
-            ? torrent.files.filter((file: any, index: number) => selectedFiles.includes(index))
-            : torrent.files;
+            ? engine.files.filter((_: any, index: number) => selectedFiles.includes(index))
+            : engine.files;
 
           // Deselect files not in selection
           if (selectedFiles && selectedFiles.length > 0) {
-            torrent.files.forEach((file: any, index: number) => {
+            engine.files.forEach((file: any, index: number) => {
               if (!selectedFiles.includes(index)) {
                 file.deselect();
               }
             });
           }
 
-          const downloadedFiles: any[] = [];
-
-          // Wait for files to download
+          // Download each file
           for (const file of filesToDownload) {
             await new Promise<void>((resolveFile) => {
-              const filePath = path.join('/tmp', sessionId, file.path);
-              
-              file.getBuffer(async (err: string | Error | undefined, buffer?: Buffer) => {
-                if (err || !buffer) {
-                  console.error('Error downloading file:', err);
-                  resolveFile();
-                  return;
-                }
+              const chunks: Buffer[] = [];
+              const stream = file.createReadStream();
 
+              stream.on('data', (chunk: Buffer) => {
+                chunks.push(chunk);
+              });
+
+              stream.on('end', async () => {
                 try {
-                  // Ensure directory exists
-                  const dir = path.dirname(filePath);
-                  await mkdir(dir, { recursive: true });
-
-                  // Write file to temp location
-                  await writeFile(filePath, buffer);
-
+                  const buffer = Buffer.concat(chunks);
+                  
                   // Generate S3 key and upload
                   const s3Key = generateS3Key(userId, file.name, directoryPath);
                   await uploadFileToS3({
@@ -125,21 +110,24 @@ export async function POST(request: NextRequest) {
                   );
 
                   downloadedFiles.push(result.rows[0]);
-
-                  // Clean up temp file
-                  await unlink(filePath);
                 } catch (error) {
                   console.error('Error processing file:', error);
                 }
+                
+                resolveFile();
+              });
 
+              stream.on('error', (error: Error) => {
+                console.error('Stream error:', error);
                 resolveFile();
               });
             });
           }
 
           // Clean up
-          client.destroy();
-          torrentClients.delete(sessionId);
+          engine.destroy(() => {
+            torrentEngines.delete(sessionId);
+          });
 
           resolve(
             NextResponse.json({
@@ -151,8 +139,9 @@ export async function POST(request: NextRequest) {
           );
         } catch (error) {
           console.error('Error in torrent download:', error);
-          client.destroy();
-          torrentClients.delete(sessionId);
+          engine.destroy(() => {
+            torrentEngines.delete(sessionId);
+          });
           
           resolve(
             NextResponse.json(
@@ -161,6 +150,20 @@ export async function POST(request: NextRequest) {
             )
           );
         }
+      });
+
+      engine.on('error', (error: Error) => {
+        console.error('Engine error:', error);
+        engine.destroy(() => {
+          torrentEngines.delete(sessionId);
+        });
+        
+        resolve(
+          NextResponse.json(
+            { error: 'Failed to start torrent download: ' + error.message },
+            { status: 500 }
+          )
+        );
       });
     });
   } catch (error) {
@@ -185,8 +188,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const client = torrentClients.get(sessionId);
-    if (!client || client.torrents.length === 0) {
+    const engine = torrentEngines.get(sessionId);
+    if (!engine) {
       return NextResponse.json({
         success: true,
         progress: 0,
@@ -197,17 +200,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const torrent = client.torrents[0];
-
     return NextResponse.json({
       success: true,
-      progress: torrent.progress,
-      downloadSpeed: torrent.downloadSpeed,
-      uploadSpeed: torrent.uploadSpeed,
-      numPeers: torrent.numPeers,
-      downloaded: torrent.downloaded,
-      uploaded: torrent.uploaded,
-      status: torrent.done ? 'completed' : 'downloading',
+      progress: engine.swarm ? engine.swarm.downloaded / engine.torrent.length : 0,
+      downloadSpeed: engine.swarm ? engine.swarm.downloadSpeed() : 0,
+      uploadSpeed: engine.swarm ? engine.swarm.uploadSpeed() : 0,
+      numPeers: engine.swarm ? engine.swarm.wires.length : 0,
+      downloaded: engine.swarm ? engine.swarm.downloaded : 0,
+      uploaded: engine.swarm ? engine.swarm.uploaded : 0,
+      status: 'downloading',
     });
   } catch (error) {
     console.error('Error getting torrent progress:', error);

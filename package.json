@@ -30,7 +30,7 @@
     "react-markdown": "^10.1.0",
     "react-simplemde-editor": "^5.2.0",
     "sharp": "^0.34.5",
-    "webtorrent": "^2.8.4"
+    "torrent-stream": "^1.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -38,6 +38,7 @@
     "@types/parse-torrent": "^5.8.8",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/torrent-stream": "^0.0.9",
     "@types/webtorrent": "^0.110.1",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
