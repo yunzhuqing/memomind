@@ -8,6 +8,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+import { User } from './User';
 
 @Entity('files')
 export class File {
@@ -50,7 +51,7 @@ export class File {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @ManyToOne('User', 'files', { onDelete: 'CASCADE' })
+  @ManyToOne(() => User, (user) => user.files, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
-  user?: any;
+  user?: User;
 }

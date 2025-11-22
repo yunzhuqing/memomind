@@ -38,15 +38,15 @@ export class User {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @OneToMany('File', 'user')
+  @OneToMany('File', (file: any) => file.user)
   files?: any[];
 
-  @OneToMany('Note', 'user')
+  @OneToMany('Note', (note: any) => note.user)
   notes?: any[];
 
-  @OneToMany('Task', 'user')
+  @OneToMany('Task', (task: any) => task.user)
   tasks?: any[];
 
-  @OneToMany('Directory', 'user')
+  @OneToMany('Directory', (directory: any) => directory.user)
   directories?: any[];
 }
