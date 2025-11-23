@@ -57,34 +57,61 @@ export default function TorrentDialog({
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      if (torrentFile) {
-        formData.append('file', torrentFile);
-      } else {
-        formData.append('magnetUri', magnetUri);
-      }
+      // For magnet URIs, use the metadata endpoint to fetch file list from peers
+      if (magnetUri && !torrentFile) {
+        const response = await fetch('/api/torrent/metadata', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ magnetUri }),
+        });
 
-      const response = await fetch('/api/torrent/parse', {
-        method: 'POST',
-        body: formData,
-      });
+        const data = await response.json();
 
-      const data = await response.json();
-
-      if (data.success) {
-        setTorrentInfo(data.torrent);
-        // Select all files by default (if files are available)
-        if (data.torrent.files && data.torrent.files.length > 0) {
-          setSelectedFiles(data.torrent.files.map((_: any, index: number) => index));
-        }
-        
-        if (data.torrent.isMagnetUri && data.torrent.files.length === 0) {
-          toast.success('Magnet URI parsed! File info will be retrieved when download starts.');
+        if (data.success) {
+          setTorrentInfo(data.torrent);
+          // Select all files by default
+          if (data.torrent.files && data.torrent.files.length > 0) {
+            setSelectedFiles(data.torrent.files.map((_: any, index: number) => index));
+          }
+          toast.success('Metadata fetched successfully from peers!');
         } else {
-          toast.success('Torrent parsed successfully!');
+          // Partial success - got basic info but no file list
+          if (response.status === 206) {
+            setTorrentInfo({ ...data.torrent, isMagnetUri: true });
+            toast(data.message || 'Could not fetch file list. You can still download.', {
+              icon: '⚠️',
+              duration: 4000,
+            });
+          } else {
+            toast.error(data.error || 'Failed to fetch metadata');
+          }
         }
       } else {
-        toast.error(data.error || 'Failed to parse torrent');
+        // For torrent files, use the parse endpoint
+        const formData = new FormData();
+        if (torrentFile) {
+          formData.append('file', torrentFile);
+        }
+
+        const response = await fetch('/api/torrent/parse', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setTorrentInfo(data.torrent);
+          // Select all files by default
+          if (data.torrent.files && data.torrent.files.length > 0) {
+            setSelectedFiles(data.torrent.files.map((_: any, index: number) => index));
+          }
+          toast.success('Torrent parsed successfully!');
+        } else {
+          toast.error(data.error || 'Failed to parse torrent');
+        }
       }
     } catch (error) {
       console.error('Error parsing torrent:', error);
