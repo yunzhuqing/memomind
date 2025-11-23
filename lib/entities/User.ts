@@ -7,6 +7,10 @@ import {
   OneToMany,
   Index,
 } from 'typeorm';
+import type { File } from './File';
+import type { Note } from './Note';
+import type { Task } from './Task';
+import type { Directory } from './Directory';
 
 @Entity('users')
 export class User {
@@ -38,15 +42,15 @@ export class User {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @OneToMany('File', (file: any) => file.user)
-  files?: any[];
+  @OneToMany(() => require('./File').File, (file: File) => file.user)
+  files?: File[];
 
-  @OneToMany('Note', (note: any) => note.user)
-  notes?: any[];
+  @OneToMany(() => require('./Note').Note, (note: Note) => note.user)
+  notes?: Note[];
 
-  @OneToMany('Task', (task: any) => task.user)
-  tasks?: any[];
+  @OneToMany(() => require('./Task').Task, (task: Task) => task.user)
+  tasks?: Task[];
 
-  @OneToMany('Directory', (directory: any) => directory.user)
-  directories?: any[];
+  @OneToMany(() => require('./Directory').Directory, (directory: Directory) => directory.user)
+  directories?: Directory[];
 }
