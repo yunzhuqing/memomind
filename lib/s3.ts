@@ -9,15 +9,25 @@ import {
   AbortMultipartUploadCommand,
   ListPartsCommand
 } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Readable } from 'stream';
 
 // Initialize S3 client
+const region = process.env.AWS_REGION || 'us-east-1';
+
 export const s3Client = new S3Client({
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: region,
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
   },
+  // Explicitly set the endpoint for the region to avoid redirect issues
+  endpoint: `https://s3.${region}.amazonaws.com`,
+  // Force path-style URLs to avoid bucket name resolution issues
+  forcePathStyle: false,
+  // Use regional endpoint to avoid redirect issues
+  useAccelerateEndpoint: false,
 });
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || '';
@@ -190,4 +200,31 @@ export async function listUploadedParts(key: string, uploadId: string): Promise<
 
   const response = await s3Client.send(command);
   return response.Parts?.map(part => part.PartNumber!) || [];
+}
+
+/**
+ * Upload a stream to S3 using multipart upload
+ * This is useful for large files or streaming data (e.g., torrent downloads)
+ */
+export async function uploadStreamToS3(
+  key: string,
+  stream: Readable,
+  contentType: string = 'application/octet-stream'
+): Promise<string> {
+  const upload = new Upload({
+    client: s3Client,
+    params: {
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: stream,
+      ContentType: contentType,
+    },
+    queueSize: 4, // Number of concurrent parts
+    partSize: 5 * 1024 * 1024, // 5MB per part (minimum for S3)
+  });
+
+  await upload.done();
+  
+  // Return the S3 URL
+  return `https://${BUCKET_NAME}.s3.${region}.amazonaws.com/${key}`;
 }

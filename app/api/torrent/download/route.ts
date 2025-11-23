@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import parseTorrent from 'parse-torrent';
 import Database from '@/lib/database';
-import { s3Client, generateS3Key } from '@/lib/s3';
-import { getFileType } from '@/lib/fileUtils';
-import { Upload } from '@aws-sdk/lib-storage';
+import { generateS3Key, uploadStreamToS3 } from '@/lib/s3';
+import { getFileType, getMimeType } from '@/lib/fileUtils';
 import { Readable } from 'stream';
 import path from 'path';
 
@@ -86,24 +85,14 @@ async function performTorrentDownload(
               readableStream.destroy(error);
             });
 
-            // Upload to S3 using multipart upload (streaming)
-            const upload = new Upload({
-              client: s3Client,
-              params: {
-                Bucket: process.env.AWS_S3_BUCKET!,
-                Key: s3Key,
-                Body: readableStream,
-                ContentType: 'application/octet-stream',
-              },
-              queueSize: 4, // Number of concurrent parts
-              partSize: 5 * 1024 * 1024, // 5MB per part (minimum for S3)
-            });
-
-            // Wait for upload to complete
-            await upload.done();
+            // Determine MIME type based on file extension
+            const mimeType = getMimeType(ext);
+            
+            // Upload to S3 using the common stream upload method
+            await uploadStreamToS3(s3Key, readableStream, mimeType);
 
             // Determine file type
-            const fileType = getFileType('application/octet-stream', ext);
+            const fileType = getFileType(mimeType, ext);
 
             // Save to database using ORM
             const fileRecord = await Database.createFile({
@@ -113,7 +102,7 @@ async function performTorrentDownload(
               filePath: s3Key,
               fileType,
               fileSize: file.length,
-              mimeType: 'application/octet-stream',
+              mimeType,
               directoryPath,
             });
 

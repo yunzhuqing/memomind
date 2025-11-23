@@ -70,7 +70,7 @@ export default function TaskList({ userId }: TaskListProps) {
 
   const deleteTask = async (taskId: number) => {
     try {
-      const response = await fetch(`/api/tasks?taskId=${taskId}`, {
+      const response = await fetch(`/api/tasks?taskId=${taskId}&userId=${userId}`, {
         method: 'DELETE',
       });
 
