@@ -30,7 +30,7 @@ export default function VideoPlayer({ fileId, userId, filename, onClose }: Video
   const [showControls, setShowControls] = useState(true);
   const [buffered, setBuffered] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const streamUrl = `/api/files/stream?fileId=${fileId}&userId=${userId}`;
 
