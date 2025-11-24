@@ -24,6 +24,7 @@ import {
 import TaskCenter, { UploadTask } from './TaskCenter';
 import TorrentDialog from './TorrentDialog';
 import UrlDownloadDialog from './UrlDownloadDialog';
+import VideoPlayer from './VideoPlayer';
 
 interface FileItem {
   id: number;
@@ -65,6 +66,7 @@ export default function FileManager({ userId }: FileManagerProps) {
   const [selectedDestination, setSelectedDestination] = useState<string>('/');
   const [showTorrentDialog, setShowTorrentDialog] = useState(false);
   const [showUrlDownloadDialog, setShowUrlDownloadDialog] = useState(false);
+  const [videoPlayerFile, setVideoPlayerFile] = useState<FileItem | null>(null);
 
   useEffect(() => {
     loadFiles();
@@ -670,8 +672,10 @@ export default function FileManager({ userId }: FileManagerProps) {
                 <div 
                   className="flex flex-col items-center p-4 bg-white/60 backdrop-blur-sm border border-gray-200/50 rounded-2xl hover:bg-white hover:shadow-md hover:border-indigo-200 transition-all duration-200 aspect-square overflow-hidden cursor-pointer"
                   onClick={() => {
-                    if (file.file_type === 'image' || file.file_type === 'video') {
+                    if (file.file_type === 'image') {
                       setPreviewFile(file);
+                    } else if (file.file_type === 'video') {
+                      setVideoPlayerFile(file);
                     }
                   }}
                 >
@@ -863,8 +867,8 @@ export default function FileManager({ userId }: FileManagerProps) {
       {/* Task Center */}
       <TaskCenter tasks={uploadTasks} onRemoveTask={handleRemoveTask} userId={userId} />
 
-      {/* Media Preview Modal */}
-      {previewFile && (
+      {/* Image Preview Modal */}
+      {previewFile && previewFile.file_type === 'image' && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <button
             onClick={() => setPreviewFile(null)}
@@ -874,22 +878,11 @@ export default function FileManager({ userId }: FileManagerProps) {
           </button>
           
           <div className="max-w-7xl max-h-[90vh] w-full h-full flex items-center justify-center">
-            {previewFile.file_type === 'image' ? (
-              <img
-                src={getThumbnailUrl(previewFile.id, false)}
-                alt={previewFile.original_filename}
-                className="max-w-full max-h-full object-contain rounded-lg"
-              />
-            ) : previewFile.file_type === 'video' ? (
-              <video
-                src={getThumbnailUrl(previewFile.id, false)}
-                controls
-                autoPlay
-                className="max-w-full max-h-full rounded-lg"
-              >
-                Your browser does not support the video tag.
-              </video>
-            ) : null}
+            <img
+              src={getThumbnailUrl(previewFile.id, false)}
+              alt={previewFile.original_filename}
+              className="max-w-full max-h-full object-contain rounded-lg"
+            />
           </div>
           
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-md rounded-2xl px-6 py-3">
@@ -897,6 +890,16 @@ export default function FileManager({ userId }: FileManagerProps) {
             <p className="text-white/70 text-sm text-center mt-1">{formatFileSize(previewFile.file_size)}</p>
           </div>
         </div>
+      )}
+
+      {/* Video Player */}
+      {videoPlayerFile && (
+        <VideoPlayer
+          fileId={videoPlayerFile.id}
+          userId={userId}
+          filename={videoPlayerFile.original_filename}
+          onClose={() => setVideoPlayerFile(null)}
+        />
       )}
 
       {/* New Folder Dialog */}

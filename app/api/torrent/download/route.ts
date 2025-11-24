@@ -25,13 +25,40 @@ async function performTorrentDownload(
     const engine = torrentStream(torrentSource);
     torrentEngines.set(sessionId, engine);
 
+    // Track progress updates
+    let progressInterval: NodeJS.Timeout | null = null;
+
+    // Update progress periodically
+    const updateProgress = async () => {
+      try {
+        if (engine.swarm) {
+          const totalSize = engine.files.reduce((sum: number, file: any) => sum + file.length, 0);
+          const downloaded = engine.swarm.downloaded;
+          const progress = totalSize > 0 ? Math.min(Math.round((downloaded / totalSize) * 100), 99) : 0;
+          
+          await Database.updateTask(taskId, parseInt(userId), {
+            progress,
+            downloadedSize: downloaded,
+          });
+          
+          console.log(`Torrent progress: ${downloaded}/${totalSize} bytes (${progress}%)`);
+        }
+      } catch (error) {
+        console.error('Error updating torrent progress:', error);
+      }
+    };
+
     engine.on('ready', async () => {
+      // Start progress updates every 2 seconds
+      progressInterval = setInterval(updateProgress, 2000);
+
       try {
         // Update task with total size
         const totalSize = engine.files.reduce((sum: number, file: any) => sum + file.length, 0);
         if (totalSize > 0) {
           await Database.updateTask(taskId, parseInt(userId), {
             totalSize,
+            progress: 1, // Initial progress
           });
         }
 
@@ -64,7 +91,7 @@ async function performTorrentDownload(
             const s3Key = generateS3Key(userId, uniqueFilename, directoryPath);
             
             // Create readable stream from torrent file
-            const torrentStream = file.createReadStream();
+            const torrentFileStream = file.createReadStream();
             
             // Convert to Node.js Readable stream
             const readableStream = new Readable({
@@ -73,15 +100,15 @@ async function performTorrentDownload(
               }
             });
 
-            torrentStream.on('data', (chunk: Buffer) => {
+            torrentFileStream.on('data', (chunk: Buffer) => {
               readableStream.push(chunk);
             });
 
-            torrentStream.on('end', () => {
+            torrentFileStream.on('end', () => {
               readableStream.push(null); // Signal end of stream
             });
 
-            torrentStream.on('error', (error: Error) => {
+            torrentFileStream.on('error', (error: Error) => {
               readableStream.destroy(error);
             });
 
@@ -113,6 +140,11 @@ async function performTorrentDownload(
           }
         }
 
+        // Stop progress updates
+        if (progressInterval) {
+          clearInterval(progressInterval);
+        }
+
         // Update task as completed
         await Database.updateTask(taskId, parseInt(userId), {
           status: 'completed',
@@ -130,6 +162,11 @@ async function performTorrentDownload(
       } catch (error) {
         console.error('Error in torrent download:', error);
         
+        // Stop progress updates
+        if (progressInterval) {
+          clearInterval(progressInterval);
+        }
+
         // Update task as failed
         await Database.updateTask(taskId, parseInt(userId), {
           status: 'failed',
@@ -147,6 +184,11 @@ async function performTorrentDownload(
     engine.on('error', async (error: Error) => {
       console.error('Engine error:', error);
       
+      // Stop progress updates
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+
       // Update task as failed
       await Database.updateTask(taskId, parseInt(userId), {
         status: 'failed',

@@ -35,13 +35,47 @@ async function performDownload(
       });
     }
 
-    // Read response as buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    // Stream download with progress updates
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('Failed to get response reader');
+    }
 
-    // Update progress
+    const chunks: Uint8Array[] = [];
+    let downloadedSize = 0;
+    let lastProgressUpdate = Date.now();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) break;
+      
+      chunks.push(value);
+      downloadedSize += value.length;
+
+      // Update progress every 500ms or every 1MB
+      const now = Date.now();
+      if (now - lastProgressUpdate > 500 || downloadedSize % (1024 * 1024) < value.length) {
+        const progress = totalSize > 0 
+          ? Math.min(Math.round((downloadedSize / totalSize) * 70), 70) // 0-70% for download
+          : Math.min(Math.round(downloadedSize / (10 * 1024 * 1024) * 70), 70); // Estimate if size unknown
+        
+        await Database.updateTask(taskId, userId, {
+          progress,
+          downloadedSize,
+        });
+        
+        lastProgressUpdate = now;
+        console.log(`Download progress: ${downloadedSize} bytes (${progress}%)`);
+      }
+    }
+
+    // Combine chunks into buffer
+    const buffer = Buffer.concat(chunks);
+    
+    // Update progress to 70% (download complete, now uploading to S3)
     await Database.updateTask(taskId, userId, {
-      progress: 50,
+      progress: 70,
       downloadedSize: buffer.length,
     });
 
@@ -61,9 +95,9 @@ async function performDownload(
       contentType,
     });
 
-    // Update progress
+    // Update progress to 85% (S3 upload complete)
     await Database.updateTask(taskId, userId, {
-      progress: 75,
+      progress: 85,
     });
 
     // Determine file type
