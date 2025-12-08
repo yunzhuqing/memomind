@@ -206,6 +206,16 @@ async function performTorrentDownload(
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { 
       userId, 
@@ -220,6 +230,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { error: 'User ID is required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 

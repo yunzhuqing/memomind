@@ -66,7 +66,7 @@ export class Database {
   static async getAllUsers(): Promise<User[]> {
     const repo = await getRepository<User>(User);
     return await repo.find({
-      select: ['id', 'email', 'name', 'createdAt'],
+      select: ['id', 'email', 'name', 'role', 'teamId', 'address', 'createdAt', 'updatedAt'],
       order: { createdAt: 'DESC' },
     });
   }

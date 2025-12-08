@@ -5,6 +5,16 @@ import { mapDirectoryToResponse } from '@/lib/entityMappers';
 // GET - List directories
 export async function GET(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const parentPath = searchParams.get('parentPath') || '/';
@@ -13,6 +23,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'userId is required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 
@@ -34,6 +52,16 @@ export async function GET(request: NextRequest) {
 // POST - Create a new directory
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { userId, name, parentPath = '/' } = body;
 
@@ -41,6 +69,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'userId and name are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 
@@ -89,6 +125,16 @@ export async function POST(request: NextRequest) {
 // DELETE - Remove a directory
 export async function DELETE(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const directoryId = searchParams.get('directoryId');
     const userId = searchParams.get('userId');
@@ -97,6 +143,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { error: 'directoryId and userId are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 

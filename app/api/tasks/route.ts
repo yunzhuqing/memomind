@@ -4,6 +4,16 @@ import Database from '@/lib/database';
 // GET - 获取用户的任务列表
 export async function GET(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const status = searchParams.get('status');
@@ -13,6 +23,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'User ID is required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 
@@ -37,6 +55,16 @@ export async function GET(request: NextRequest) {
 // POST - 创建新任务
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       userId,
@@ -52,6 +80,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'userId, type, and name are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 
@@ -81,6 +117,16 @@ export async function POST(request: NextRequest) {
 // PATCH - 更新任务状态和进度
 export async function PATCH(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const {
       taskId,
@@ -95,6 +141,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         { error: 'Task ID and User ID are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 
@@ -145,6 +199,16 @@ export async function PATCH(request: NextRequest) {
 // DELETE - 删除任务
 export async function DELETE(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get('taskId');
     const userId = searchParams.get('userId');
@@ -153,6 +217,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { error: 'Task ID and User ID are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 

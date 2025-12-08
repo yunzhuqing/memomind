@@ -41,16 +41,35 @@ export async function POST(request: NextRequest) {
       address: address || undefined,
     });
 
-    return NextResponse.json({
-      user: {
-        id: user.id.toString(),
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        team_id: user.teamId,
-        address: user.address,
-      },
+    const userData = {
+      id: user.id.toString(),
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      team_id: user.teamId,
+      address: user.address,
+    };
+
+    // Create response with user data
+    const response = NextResponse.json({
+      user: userData,
     });
+
+    // Set user cookie for server-side authentication
+    response.cookies.set('user', JSON.stringify({
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role,
+    }), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+    });
+
+    return response;
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json(

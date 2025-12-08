@@ -7,6 +7,16 @@ const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || '';
 
 export async function GET(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const fileId = searchParams.get('fileId');
     const userId = searchParams.get('userId');
@@ -15,6 +25,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'fileId and userId are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 

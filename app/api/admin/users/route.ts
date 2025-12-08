@@ -2,24 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import Database from '@/lib/database';
 import { mapUserToResponse } from '@/lib/entityMappers';
+import { AUTH_HEADERS } from '@/lib/constants';
 
 // GET - List all users (admin only)
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const requestingUserId = searchParams.get('requestingUserId');
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get(AUTH_HEADERS.USER_ID);
+    const authUserRole = request.headers.get(AUTH_HEADERS.USER_ROLE);
 
-    if (!requestingUserId) {
+    if (!authUserId) {
       return NextResponse.json(
-        { error: 'Requesting user ID is required' },
-        { status: 400 }
+        { error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
     // Check if requesting user is admin
-    const adminUser = await Database.findUserById(parseInt(requestingUserId));
-
-    if (!adminUser || adminUser.role !== 'admin') {
+    if (authUserRole !== 'admin') {
       return NextResponse.json(
         { error: 'Unauthorized. Admin access required.' },
         { status: 403 }
@@ -45,25 +45,27 @@ export async function GET(request: NextRequest) {
 // POST - Create new user (admin only)
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { requestingUserId, email, password, name, role, team_id, address } = body;
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get(AUTH_HEADERS.USER_ID);
+    const authUserRole = request.headers.get(AUTH_HEADERS.USER_ROLE);
 
-    if (!requestingUserId) {
+    if (!authUserId) {
       return NextResponse.json(
-        { error: 'Requesting user ID is required' },
-        { status: 400 }
+        { error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
     // Check if requesting user is admin
-    const adminUser = await Database.findUserById(parseInt(requestingUserId));
-
-    if (!adminUser || adminUser.role !== 'admin') {
+    if (authUserRole !== 'admin') {
       return NextResponse.json(
         { error: 'Unauthorized. Admin access required.' },
         { status: 403 }
       );
     }
+
+    const body = await request.json();
+    const { email, password, name, role, team_id, address } = body;
 
     // Validate input
     if (!email || !password || !name) {
@@ -116,23 +118,32 @@ export async function POST(request: NextRequest) {
 // PATCH - Update user (admin only)
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { requestingUserId, userId, email, name, role, team_id, address } = body;
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get(AUTH_HEADERS.USER_ID);
+    const authUserRole = request.headers.get(AUTH_HEADERS.USER_ROLE);
 
-    if (!requestingUserId || !userId) {
+    if (!authUserId) {
       return NextResponse.json(
-        { error: 'Requesting user ID and user ID are required' },
-        { status: 400 }
+        { error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
     // Check if requesting user is admin
-    const adminUser = await Database.findUserById(parseInt(requestingUserId));
-
-    if (!adminUser || adminUser.role !== 'admin') {
+    if (authUserRole !== 'admin') {
       return NextResponse.json(
         { error: 'Unauthorized. Admin access required.' },
         { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+    const { userId, email, name, role, team_id, address } = body;
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 }
       );
     }
 
@@ -185,29 +196,37 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete user (admin only)
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const requestingUserId = searchParams.get('requestingUserId');
-    const userId = searchParams.get('userId');
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get(AUTH_HEADERS.USER_ID);
+    const authUserRole = request.headers.get(AUTH_HEADERS.USER_ROLE);
 
-    if (!requestingUserId || !userId) {
+    if (!authUserId) {
       return NextResponse.json(
-        { error: 'Requesting user ID and user ID are required' },
-        { status: 400 }
+        { error: 'Unauthorized' },
+        { status: 401 }
       );
     }
 
     // Check if requesting user is admin
-    const adminUser = await Database.findUserById(parseInt(requestingUserId));
-
-    if (!adminUser || adminUser.role !== 'admin') {
+    if (authUserRole !== 'admin') {
       return NextResponse.json(
         { error: 'Unauthorized. Admin access required.' },
         { status: 403 }
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 }
+      );
+    }
+
     // Prevent admin from deleting themselves
-    if (requestingUserId === userId) {
+    if (authUserId === userId) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }

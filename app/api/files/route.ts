@@ -2,10 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { deleteFileFromS3 } from '@/lib/s3';
 import Database from '@/lib/database';
 import { mapFileToResponse } from '@/lib/entityMappers';
+import { AUTH_HEADERS } from '@/lib/constants';
 
 // GET - List files with optional search and directory filter
 export async function GET(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get(AUTH_HEADERS.USER_ID);
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const directoryPath = searchParams.get('directoryPath') || '/';
@@ -16,6 +27,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'userId is required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 
@@ -41,6 +60,16 @@ export async function GET(request: NextRequest) {
 // PATCH - Move a file to a different directory
 export async function PATCH(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get(AUTH_HEADERS.USER_ID);
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { fileId, userId, newDirectoryPath } = body;
 
@@ -48,6 +77,14 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         { error: 'fileId, userId, and newDirectoryPath are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 
@@ -82,6 +119,16 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Remove a file
 export async function DELETE(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get(AUTH_HEADERS.USER_ID);
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const fileId = searchParams.get('fileId');
     const userId = searchParams.get('userId');
@@ -90,6 +137,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { error: 'fileId and userId are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 

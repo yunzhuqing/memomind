@@ -157,6 +157,16 @@ async function performDownload(
 
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
+    const authUserId = request.headers.get('x-user-id');
+    
+    if (!authUserId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     const { userId, url, directoryPath = '/', filename } = body;
 
@@ -164,6 +174,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'userId and url are required' },
         { status: 400 }
+      );
+    }
+
+    // Validate user access
+    if (authUserId !== userId) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
       );
     }
 

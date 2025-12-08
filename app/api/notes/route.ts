@@ -4,11 +4,12 @@ import Database from '@/lib/database';
 // GET all notes for a user
 export async function GET(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
     const userId = request.headers.get('x-user-id');
-
+    
     if (!userId) {
       return NextResponse.json(
-        { error: 'User ID is required' },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
@@ -36,11 +37,12 @@ export async function GET(request: NextRequest) {
 // POST create a new note
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
     const userId = request.headers.get('x-user-id');
-
+    
     if (!userId) {
       return NextResponse.json(
-        { error: 'User ID is required' },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
@@ -81,11 +83,12 @@ export async function POST(request: NextRequest) {
 // PUT update a note
 export async function PUT(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
     const userId = request.headers.get('x-user-id');
-
+    
     if (!userId) {
       return NextResponse.json(
-        { error: 'User ID is required' },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
@@ -141,11 +144,12 @@ export async function PUT(request: NextRequest) {
 // DELETE a note
 export async function DELETE(request: NextRequest) {
   try {
+    // Get authenticated user from middleware headers
     const userId = request.headers.get('x-user-id');
-
+    
     if (!userId) {
       return NextResponse.json(
-        { error: 'User ID is required' },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
