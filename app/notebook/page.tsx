@@ -31,6 +31,8 @@ export default function NotebookPage() {
           router.push('/notebook');
         } else if (tab === 'files') {
           router.push('/files');
+        } else if (tab === 'chat') {
+          router.push('/chat');
         } else if (tab === 'admin') {
           router.push('/admin');
         }

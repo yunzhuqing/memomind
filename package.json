@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.86",
+    "@ai-sdk/react": "^2.0.115",
     "@aws-sdk/client-s3": "^3.930.0",
     "@aws-sdk/lib-storage": "^3.937.0",
     "@aws-sdk/s3-request-presigner": "^3.930.0",
@@ -17,6 +19,7 @@
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/pg": "^8.15.6",
     "@uiw/react-md-editor": "^4.0.8",
+    "ai": "^5.0.113",
     "bcrypt": "^6.0.0",
     "dotenv": "^17.2.3",
     "easymde": "^2.20.0",
@@ -25,8 +28,8 @@
     "next": "^16.0.7",
     "parse-torrent": "^11.0.19",
     "pg": "^8.16.3",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "react-hot-toast": "^2.6.0",
     "react-markdown": "^10.1.0",
     "react-simplemde-editor": "^5.2.0",

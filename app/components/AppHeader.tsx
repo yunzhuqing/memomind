@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
 
 interface AppHeaderProps {
-  activeTab: 'notes' | 'files' | 'admin';
-  onTabChange: (tab: 'notes' | 'files' | 'admin') => void;
+  activeTab: 'notes' | 'files' | 'admin' | 'chat';
+  onTabChange: (tab: 'notes' | 'files' | 'admin' | 'chat') => void;
 }
 
 export default function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
@@ -47,6 +47,16 @@ export default function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
               }`}
             >
               Files
+            </button>
+            <button
+              onClick={() => onTabChange('chat')}
+              className={`px-6 py-2 font-medium rounded-md transition-colors ${
+                activeTab === 'chat'
+                  ? 'bg-white text-indigo-600'
+                  : 'bg-indigo-700 text-white hover:bg-indigo-500'
+              }`}
+            >
+              Chat
             </button>
             {user?.role === 'admin' && (
               <button

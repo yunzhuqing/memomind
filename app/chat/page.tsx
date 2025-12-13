@@ -4,9 +4,9 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
 import AppHeader from '@/app/components/AppHeader';
-import FileManager from '@/app/components/FileManager';
+import Chat from '../components/Chat';
 
-export default function FilesPage() {
+export default function ChatPage() {
   const { user, isAuthenticated, loading } = useAuth();
   const router = useRouter();
 
@@ -24,24 +24,27 @@ export default function FilesPage() {
     );
   }
 
+  const handleTabChange = (tab: 'notes' | 'files' | 'admin' | 'chat') => {
+    switch (tab) {
+      case 'notes':
+        router.push('/notebook');
+        break;
+      case 'files':
+        router.push('/files');
+        break;
+      case 'chat':
+        router.push('/chat');
+        break;
+      case 'admin':
+        router.push('/admin');
+        break;
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col">
-      <AppHeader activeTab="files" onTabChange={(tab) => {
-        if (tab === 'notes') {
-          router.push('/notebook');
-        } else if (tab === 'files') {
-          router.push('/files');
-        } else if (tab === 'chat') {
-          router.push('/chat');
-        } else if (tab === 'admin') {
-          router.push('/admin');
-        }
-      }} />
-
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        <FileManager userId={user.id} />
-      </div>
+      <AppHeader activeTab="chat" onTabChange={handleTabChange} />
+      <Chat />
     </div>
   );
 }

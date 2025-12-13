@@ -5,6 +5,7 @@ import { File } from './entities/File';
 import { Note } from './entities/Note';
 import { Task } from './entities/Task';
 import { Directory } from './entities/Directory';
+import { Conversation } from './entities/Conversation';
 
 // Database configuration
 const AppDataSource = new DataSource({
@@ -14,7 +15,7 @@ const AppDataSource = new DataSource({
   username: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_NAME || 'memomind',
-  entities: [User, File, Note, Task, Directory],
+  entities: [User, File, Note, Task, Directory, Conversation],
   synchronize: false, // Don't auto-sync in production
   logging: process.env.NODE_ENV === 'development',
 });
@@ -29,6 +30,11 @@ async function initializeDatabase() {
     console.log('Database connection initialized');
   }
   return AppDataSource;
+}
+
+// Export getDataSource for direct access
+export async function getDataSource(): Promise<DataSource> {
+  return await initializeDatabase();
 }
 
 // Get repository helper

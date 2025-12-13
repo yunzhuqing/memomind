@@ -6,8 +6,10 @@ import { AUTH_HEADERS, COOKIES } from '@/lib/constants';
 const publicRoutes = [
   '/api/auth/login',
   '/api/auth/register',
+  '/api/chat',
   '/login',
   '/register',
+  '/chat',
 ];
 
 // Define API routes that require authentication
@@ -19,6 +21,7 @@ const protectedApiRoutes = [
   '/api/tasks',
   '/api/directories',
   '/api/admin',
+  '/api/conversations',
 ];
 
 export function middleware(request: NextRequest) {
