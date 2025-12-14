@@ -4,12 +4,13 @@ import { useChat } from '@ai-sdk/react';
 import { useState, useRef, useEffect } from 'react';
 import type { UIMessage } from 'ai';
 import toast from 'react-hot-toast';
+import ReactMarkdown from 'react-markdown';
 
-const MODELS = [
-  { id: 'gpt-4o', name: 'GPT-4o' },
-  { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
-];
+interface Model {
+  id: string;
+  name: string;
+  provider: string;
+}
 
 interface Conversation {
   id: number;
@@ -23,19 +24,23 @@ interface Conversation {
 
 export default function ChatComponent() {
   const [model, setModel] = useState('gpt-4o');
+  const [models, setModels] = useState<Model[]>([]);
   const [input, setInput] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<Array<{ url: string; file: File }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { messages, sendMessage, status, setMessages } = useChat();
   
   const isLoading = status === 'submitted' || status === 'streaming';
 
-  // Load conversations on mount
+  // Load models and conversations on mount
   useEffect(() => {
+    loadModels();
     loadConversations();
   }, []);
 
@@ -54,6 +59,22 @@ export default function ChatComponent() {
     }
   }, [messages, currentConversationId]);
 
+  const loadModels = async () => {
+    try {
+      const response = await fetch('/api/models');
+      if (response.ok) {
+        const data = await response.json();
+        setModels(data.models || []);
+      }
+    } catch (error) {
+      console.error('Error loading models:', error);
+      // Fallback to default models if API fails
+      setModels([
+        { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
+      ]);
+    }
+  };
+
   const loadConversations = async () => {
     try {
       const response = await fetch('/api/conversations');
@@ -66,7 +87,7 @@ export default function ChatComponent() {
     }
   };
 
-  const createNewConversation = async () => {
+  const createNewConversation = async (): Promise<number | null> => {
     try {
       setLoading(true);
       const response = await fetch('/api/conversations', {
@@ -81,10 +102,13 @@ export default function ChatComponent() {
         setCurrentConversationId(newConv.id);
         setMessages([]);
         toast.success('New conversation created');
+        return newConv.id;
       }
+      return null;
     } catch (error) {
       console.error('Error creating conversation:', error);
       toast.error('Failed to create conversation');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -149,23 +173,167 @@ export default function ChatComponent() {
     setInput(e.target.value);
   };
 
+  const updateConversationTitle = async (conversationId: number, firstMessage: string) => {
+    try {
+      const response = await fetch('/api/conversations/generate-title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: firstMessage }),
+      });
+
+      if (response.ok) {
+        const { title } = await response.json();
+        
+        // Update conversation name in database
+        const updateResponse = await fetch(`/api/conversations/${conversationId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: title }),
+        });
+
+        if (updateResponse.ok) {
+          // Update local state
+          setConversations(conversations.map(c => 
+            c.id === conversationId ? { ...c, name: title } : c
+          ));
+        }
+      }
+    } catch (error) {
+      console.error('Error updating conversation title:', error);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newImages: Array<{ url: string; file: File }> = [];
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        newImages.push({ url, file });
+      }
+    }
+
+    setUploadedImages([...uploadedImages, ...newImages]);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeImage = (index: number) => {
+    const newImages = [...uploadedImages];
+    URL.revokeObjectURL(newImages[index].url);
+    newImages.splice(index, 1);
+    setUploadedImages(newImages);
+  };
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
-    
-    // Create new conversation if none exists
-    if (!currentConversationId) {
-      await createNewConversation();
-    }
+    if ((!input.trim() && uploadedImages.length === 0) || isLoading) return;
     
     const text = input;
-    setInput('');
+    const isFirstMessage = messages.length === 0;
     
-    await sendMessage({
-      text,
-    }, {
+    // Create new conversation if none exists and get the ID directly
+    let convId = currentConversationId;
+    if (!convId) {
+      const newConvId = await createNewConversation();
+      if (!newConvId) {
+        toast.error('Failed to create conversation');
+        return;
+      }
+      convId = newConvId;
+    }
+    
+    setInput('');
+
+    // Upload images to S3 and get URLs
+    const imageUrls: string[] = [];
+    const imageDataForAI: Array<{ type: 'image'; image: string }> = [];
+    
+    for (const img of uploadedImages) {
+      try {
+        const formData = new FormData();
+        formData.append('file', img.file);
+        
+        const response = await fetch(`/api/conversations/${convId}/upload-image`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          imageUrls.push(data.s3Key);
+          // Use presigned URL instead of base64
+          imageDataForAI.push({
+            type: 'image',
+            image: await fileToBase64(img.file),
+          });
+        }
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        toast.error('Failed to upload image');
+      }
+    }
+
+    // Clear uploaded images
+    uploadedImages.forEach(img => URL.revokeObjectURL(img.url));
+    setUploadedImages([]);
+
+    // Build message content parts
+    const contentParts: any[] = [];
+    
+    // Add text part if present
+    if (text.trim()) {
+      contentParts.push({
+        type: 'text',
+        text: text
+      });
+    }
+    
+    // Add image parts
+    for (const imgData of imageDataForAI) {
+      contentParts.push(imgData);
+    }
+    
+    // Create message object
+    const userMessage: any = {
+      role: 'user',
+      parts: contentParts
+    };
+    
+    // Add image URLs to data for storage
+    if (imageUrls.length > 0) {
+      userMessage.data = { imageUrls };
+    }
+    
+    await sendMessage(userMessage, {
       body: { model }
     });
+
+    // Generate and update title after first message
+    if (isFirstMessage && convId) {
+      // Wait a bit for the conversation to be created
+      setTimeout(() => {
+        if (convId) {
+          updateConversationTitle(convId, text || 'Image analysis');
+        }
+      }, 1000);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -236,7 +404,7 @@ export default function ChatComponent() {
             onChange={(e) => setModel(e.target.value)}
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
           >
-            {MODELS.map((m) => (
+            {models.map((m: Model) => (
               <option key={m.id} value={m.id}>
                 {m.name}
               </option>
@@ -305,8 +473,44 @@ export default function ChatComponent() {
                           <div className="font-semibold text-gray-800">
                             {m.role === 'user' ? 'You' : 'Assistant'}
                           </div>
-                          <div className="prose prose-sm max-w-none text-gray-700 whitespace-pre-wrap break-words">
-                            {messageText || (isLoading && m.role === 'assistant' ? '...' : '')}
+                          <div className="prose prose-sm max-w-none text-gray-700">
+                            {m.role === 'user' ? (
+                              <div className="whitespace-pre-wrap break-words">{messageText}</div>
+                            ) : (
+                              <ReactMarkdown
+                                components={{
+                                  code: ({ node, inline, className, children, ...props }: any) => {
+                                    return inline ? (
+                                      <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono" {...props}>
+                                        {children}
+                                      </code>
+                                    ) : (
+                                      <code className="block bg-gray-100 p-3 rounded-lg overflow-x-auto text-sm font-mono" {...props}>
+                                        {children}
+                                      </code>
+                                    );
+                                  },
+                                  pre: ({ children }: any) => <div className="my-2">{children}</div>,
+                                  p: ({ children }: any) => <p className="mb-2 last:mb-0">{children}</p>,
+                                  ul: ({ children }: any) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                                  ol: ({ children }: any) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                                  li: ({ children }: any) => <li className="mb-1">{children}</li>,
+                                  h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-2 mt-4">{children}</h1>,
+                                  h2: ({ children }: any) => <h2 className="text-xl font-bold mb-2 mt-3">{children}</h2>,
+                                  h3: ({ children }: any) => <h3 className="text-lg font-bold mb-2 mt-2">{children}</h3>,
+                                  blockquote: ({ children }: any) => (
+                                    <blockquote className="border-l-4 border-gray-300 pl-4 italic my-2">{children}</blockquote>
+                                  ),
+                                  a: ({ children, href }: any) => (
+                                    <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
+                                      {children}
+                                    </a>
+                                  ),
+                                }}
+                              >
+                                {messageText || (isLoading ? '...' : '')}
+                              </ReactMarkdown>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -322,14 +526,46 @@ export default function ChatComponent() {
         {/* Input Area */}
         <div className="sticky bottom-0 bg-white border-t border-gray-200 pt-4 pb-4">
           <div className="max-w-3xl mx-auto px-4">
+            {/* Image Preview */}
+            {uploadedImages.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {uploadedImages.map((img, index) => (
+                  <div key={index} className="relative group">
+                    <img 
+                      src={img.url} 
+                      alt={`Upload ${index + 1}`} 
+                      className="h-20 w-20 object-cover rounded-lg border border-gray-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            
             <form onSubmit={handleSubmit} className="relative">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                className="hidden"
+              />
               <textarea
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 placeholder="Send a message..."
                 rows={1}
-                className="w-full resize-none rounded-2xl border border-gray-300 bg-white px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-gray-900 placeholder-gray-400"
+                className="w-full resize-none rounded-2xl border border-gray-300 bg-white px-4 py-3 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-gray-900 placeholder-gray-400"
                 style={{ minHeight: '52px', maxHeight: '200px' }}
                 onInput={(e) => {
                   const target = e.target as HTMLTextAreaElement;
@@ -338,8 +574,17 @@ export default function ChatComponent() {
                 }}
               />
               <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="absolute left-2 bottom-2 p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-all"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <button
                 type="submit"
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && uploadedImages.length === 0) || isLoading}
                 className="absolute right-2 bottom-2 p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
