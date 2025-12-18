@@ -13,6 +13,10 @@ import { getFileType } from '@/lib/fileUtils';
 import { generateThumbnailFromS3 } from '@/lib/thumbnailGenerator';
 import { mapFileToResponse } from '@/lib/entityMappers';
 
+// Configure route segment to handle larger request bodies (50MB for chunked uploads)
+export const runtime = 'nodejs';
+export const maxDuration = 300; // 5 minutes timeout for large uploads
+
 // Store upload sessions in memory (in production, use Redis or database)
 const uploadSessions = new Map<string, {
   uploadId: string;
@@ -29,9 +33,12 @@ const uploadSessions = new Map<string, {
 }>();
 
 export async function POST(request: NextRequest) {
+  let formData: FormData | undefined;
+  let action: string | undefined;
+  
   try {
-    const formData = await request.formData();
-    const action = formData.get('action') as string;
+    formData = await request.formData();
+    action = formData.get('action') as string;
 
     // Initialize upload
     if (action === 'init') {
@@ -273,17 +280,19 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Chunk upload error:', error);
     
-    // Try to update task as failed if we have session info
+    // Try to update task as failed if we have session info from formData
+    // Note: formData is already parsed above, so we can use it here
     try {
-      const formData = await request.formData();
-      const sessionId = formData.get('sessionId') as string;
-      if (sessionId) {
-        const session = uploadSessions.get(sessionId);
-        if (session?.taskId) {
-          await Database.updateTask(session.taskId, parseInt(session.userId), {
-            status: 'failed',
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-          });
+      if (formData) {
+        const sessionId = formData.get('sessionId') as string;
+        if (sessionId) {
+          const session = uploadSessions.get(sessionId);
+          if (session?.taskId) {
+            await Database.updateTask(session.taskId, parseInt(session.userId), {
+              status: 'failed',
+              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
         }
       }
     } catch (updateError) {

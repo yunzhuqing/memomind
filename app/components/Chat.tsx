@@ -278,10 +278,10 @@ export default function ChatComponent() {
         if (response.ok) {
           const data = await response.json();
           imageUrls.push(data.s3Key);
-          // Use presigned URL instead of base64
+          // Use presigned URL from S3
           imageDataForAI.push({
             type: 'image',
-            image: await fileToBase64(img.file),
+            image: data.url, // Use presigned URL instead of base64
           });
         }
       } catch (error) {

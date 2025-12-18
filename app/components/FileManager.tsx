@@ -19,7 +19,8 @@ import {
   ListBulletIcon,
   XMarkIcon,
   ArrowRightIcon,
-  LinkIcon
+  LinkIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import TaskCenter, { UploadTask } from './TaskCenter';
 import TorrentDialog from './TorrentDialog';
@@ -67,6 +68,10 @@ export default function FileManager({ userId }: FileManagerProps) {
   const [showTorrentDialog, setShowTorrentDialog] = useState(false);
   const [showUrlDownloadDialog, setShowUrlDownloadDialog] = useState(false);
   const [videoPlayerFile, setVideoPlayerFile] = useState<FileItem | null>(null);
+  const [editingFile, setEditingFile] = useState<FileItem | null>(null);
+  const [fileContent, setFileContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
 
   useEffect(() => {
     loadFiles();
@@ -503,6 +508,81 @@ export default function FileManager({ userId }: FileManagerProps) {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
+  const isEditableFile = (fileType: string) => {
+    return ['json', 'text', 'markdown'].includes(fileType);
+  };
+
+  const handleEditFile = async (file: FileItem) => {
+    if (!isEditableFile(file.file_type)) {
+      toast.error('This file type cannot be edited');
+      return;
+    }
+
+    setIsLoadingContent(true);
+    setEditingFile(file);
+
+    try {
+      const response = await fetch(`/api/files/content?fileId=${file.id}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setFileContent(data.content);
+      } else {
+        toast.error(data.error || 'Failed to load file content');
+        setEditingFile(null);
+      }
+    } catch (error) {
+      console.error('Error loading file content:', error);
+      toast.error('Failed to load file content');
+      setEditingFile(null);
+    } finally {
+      setIsLoadingContent(false);
+    }
+  };
+
+  const handleSaveFile = async () => {
+    if (!editingFile) return;
+
+    setIsSaving(true);
+
+    try {
+      const response = await fetch('/api/files/content', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileId: editingFile.id,
+          content: fileContent,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('File saved successfully!');
+        setEditingFile(null);
+        setFileContent('');
+        loadFiles(); // Reload to update file size
+      } else {
+        toast.error(data.error || 'Failed to save file');
+      }
+    } catch (error) {
+      console.error('Error saving file:', error);
+      toast.error('Failed to save file');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCloseEditor = () => {
+    if (fileContent !== '' && !confirm('You have unsaved changes. Are you sure you want to close?')) {
+      return;
+    }
+    setEditingFile(null);
+    setFileContent('');
+  };
+
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Modern Header */}
@@ -740,6 +820,15 @@ export default function FileManager({ userId }: FileManagerProps) {
                   </div>
                 </div>
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">
+                  {isEditableFile(file.file_type) && (
+                    <button
+                      onClick={() => handleEditFile(file)}
+                      className="p-2 bg-white text-blue-600 hover:bg-blue-50 rounded-lg shadow-md transition-all"
+                      title="Edit"
+                    >
+                      <PencilSquareIcon className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleMoveFile(file)}
                     className="p-2 bg-white text-green-600 hover:bg-green-50 rounded-lg shadow-md transition-all"
@@ -826,6 +915,15 @@ export default function FileManager({ userId }: FileManagerProps) {
                   </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {isEditableFile(file.file_type) && (
+                    <button
+                      onClick={() => handleEditFile(file)}
+                      className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                      title="Edit"
+                    >
+                      <PencilSquareIcon className="w-5 h-5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleMoveFile(file)}
                     className="p-2.5 text-green-600 hover:bg-green-50 rounded-xl transition-all"
@@ -962,6 +1060,84 @@ export default function FileManager({ userId }: FileManagerProps) {
             loadDirectories();
           }}
         />
+      )}
+
+      {/* File Editor Modal - Simple & Clean */}
+      {editingFile && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-7xl h-[90vh] shadow-xl flex flex-col overflow-hidden">
+            {/* Editor Header - Simple */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{editingFile.original_filename}</h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {editingFile.file_type.toUpperCase()} • {fileContent.split('\n').length} lines • {fileContent.length} characters
+                </p>
+              </div>
+              <button
+                onClick={handleCloseEditor}
+                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                title="Close"
+              >
+                <XMarkIcon className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Editor Content - Maximized */}
+            <div className="flex-1 overflow-hidden">
+              {isLoadingContent ? (
+                <div className="flex items-center justify-center h-full bg-gray-50">
+                  <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-gray-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3"></div>
+                    <p className="text-gray-600 text-sm">Loading...</p>
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  value={fileContent}
+                  onChange={(e) => setFileContent(e.target.value)}
+                  className="w-full h-full px-6 py-4 bg-white text-gray-900 font-mono text-sm leading-relaxed resize-none focus:outline-none border-0"
+                  placeholder="Start typing..."
+                  spellCheck={false}
+                  style={{
+                    tabSize: 2,
+                    lineHeight: '1.6',
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Editor Footer - Simple */}
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
+              <div className="text-sm text-gray-500">
+                {editingFile.file_type === 'json' && '⚠️ JSON will be validated before saving'}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCloseEditor}
+                  disabled={isSaving}
+                  className="px-5 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveFile}
+                  disabled={isSaving || isLoadingContent}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSaving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Move File Dialog */}
