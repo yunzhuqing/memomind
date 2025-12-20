@@ -444,12 +444,16 @@ export default function ChatComponent() {
                 {messages.map((m: UIMessage) => {
                   // Extract text content from UIMessage
                   let messageText = '';
+                  const imageParts: any[] = [];
                   
                   if (m.parts && Array.isArray(m.parts) && m.parts.length > 0) {
                     messageText = m.parts
                       .filter((part: any) => part.type === 'text')
                       .map((part: any) => part.text || '')
                       .join('');
+                    
+                    // Extract image parts
+                    imageParts.push(...m.parts.filter((part: any) => part.type === 'image'));
                   }
                   
                   if (!messageText && (m as any).content) {
@@ -473,6 +477,21 @@ export default function ChatComponent() {
                           <div className="font-semibold text-gray-800">
                             {m.role === 'user' ? 'You' : 'Assistant'}
                           </div>
+                          
+                          {/* Display images if present */}
+                          {imageParts.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {imageParts.map((imgPart: any, idx: number) => (
+                                <img 
+                                  key={idx}
+                                  src={imgPart.image} 
+                                  alt={`Image ${idx + 1}`}
+                                  className="max-w-xs max-h-64 rounded-lg border border-gray-300 object-contain"
+                                />
+                              ))}
+                            </div>
+                          )}
+                          
                           <div className="prose prose-sm max-w-none text-gray-700">
                             {m.role === 'user' ? (
                               <div className="whitespace-pre-wrap break-words">{messageText}</div>
@@ -517,6 +536,34 @@ export default function ChatComponent() {
                     </div>
                   );
                 })}
+                
+                {/* Loading indicator */}
+                {isLoading && (
+                  <div className="group">
+                    <div className="flex gap-4 bg-gray-50 -mx-4 px-4 py-6">
+                      {/* Avatar */}
+                      <div className="flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold bg-green-600">
+                          AI
+                        </div>
+                      </div>
+                      
+                      {/* Loading Content */}
+                      <div className="flex-1 space-y-2 overflow-hidden">
+                        <div className="font-semibold text-gray-800">Assistant</div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex space-x-1">
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                          </div>
+                          <span className="text-sm text-gray-500">Thinking...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <div ref={messagesEndRef} />
               </div>
             )}

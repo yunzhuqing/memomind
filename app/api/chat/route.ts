@@ -45,13 +45,19 @@ export async function POST(req: Request) {
               ? await urlToBase64(part.image)
               : part.image;
             return { type: 'image', image: imageData };
+          } else if (part.type === 'step-start') {
+            // Skip step-start parts from assistant messages
+            return null;
           }
           return part;
         }));
         
+        // Filter out null values (step-start parts)
+        const filteredContent = content.filter(c => c !== null);
+        
         return {
           role: msg.role,
-          content: content
+          content: filteredContent.length > 0 ? filteredContent : [{ type: 'text', text: '' }]
         };
       } else if (msg.content) {
         // Handle simple text messages
