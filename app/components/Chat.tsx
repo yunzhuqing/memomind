@@ -322,7 +322,10 @@ export default function ChatComponent() {
     }
     
     await sendMessage(userMessage, {
-      body: { model }
+      body: { 
+        model,
+        conversationId: convId
+      }
     });
 
     // Generate and update title after first message
