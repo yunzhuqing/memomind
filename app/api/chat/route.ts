@@ -3,8 +3,9 @@ import { streamText, convertToCoreMessages, createUIMessageStreamResponse } from
 import { s3Client, BUCKET_NAME } from '@/lib/s3';
 import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import Database from '@/lib/database';
+import Database, { getDataSource } from '@/lib/database';
 import { generateThumbnail } from '@/lib/thumbnailGenerator';
+import { Directory } from '@/lib/entities/Directory';
 
 const openai = createOpenAI({
   baseURL: process.env.OPENAI_BASE_URL,
@@ -228,6 +229,42 @@ export async function POST(req: Request) {
           console.error('Failed to generate thumbnail for AI image:', error);
         }
 
+        // Ensure conversation directory exists
+        const dataSource = await getDataSource();
+        const directoryRepo = dataSource.getRepository(Directory);
+        const conversationPath = `/conversations/${conversationId}`;
+        
+        const existingDir = await directoryRepo.findOne({
+          where: { userId: parseInt(userId), path: conversationPath },
+        });
+
+        if (!existingDir) {
+          // Ensure parent conversations directory exists
+          const conversationsPath = '/conversations';
+          const parentDir = await directoryRepo.findOne({
+            where: { userId: parseInt(userId), path: conversationsPath },
+          });
+
+          if (!parentDir) {
+            const directory = directoryRepo.create({
+              userId: parseInt(userId),
+              name: 'conversations',
+              path: conversationsPath,
+              parentPath: '/',
+            });
+            await directoryRepo.save(directory);
+          }
+
+          // Create conversation directory
+          const directory = directoryRepo.create({
+            userId: parseInt(userId),
+            name: conversationId.toString(),
+            path: conversationPath,
+            parentPath: conversationsPath,
+          });
+          await directoryRepo.save(directory);
+        }
+
         // Save file metadata to database
         const savedFile = await Database.createFile({
           userId: parseInt(userId),
@@ -237,7 +274,7 @@ export async function POST(req: Request) {
           fileType: 'image',
           fileSize: imageBuffer.length,
           mimeType: `image/${outputFormat}`,
-          directoryPath: '/', // Default to root directory for now, or could use a specific folder
+          directoryPath: conversationPath,
           thumbnailKey: thumbnailKey || undefined,
         });
 

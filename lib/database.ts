@@ -6,6 +6,7 @@ import { Note } from './entities/Note';
 import { Task } from './entities/Task';
 import { Directory } from './entities/Directory';
 import { Conversation } from './entities/Conversation';
+import { UserSettings } from './entities/UserSettings';
 
 // Database configuration
 const AppDataSource = new DataSource({
@@ -15,7 +16,7 @@ const AppDataSource = new DataSource({
   username: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_NAME || 'memomind',
-  entities: [User, File, Note, Task, Directory, Conversation],
+  entities: [User, File, Note, Task, Directory, Conversation, UserSettings],
   synchronize: false, // Don't auto-sync in production
   logging: process.env.NODE_ENV === 'development',
 });
@@ -240,6 +241,25 @@ export class Database {
     const repo = await getRepository(Directory);
     const result = await repo.delete({ id, userId });
     return result.affected ? result.affected > 0 : false;
+  }
+
+  // User Settings operations
+  static async getUserSettings(userId: number): Promise<UserSettings | null> {
+    const repo = await getRepository<UserSettings>(UserSettings);
+    return await repo.findOne({ where: { userId } });
+  }
+
+  static async updateUserSettings(userId: number, data: Partial<UserSettings>): Promise<UserSettings> {
+    const repo = await getRepository<UserSettings>(UserSettings);
+    let settings = await repo.findOne({ where: { userId } });
+
+    if (!settings) {
+      settings = repo.create({ userId, ...data });
+    } else {
+      repo.merge(settings, data);
+    }
+
+    return await repo.save(settings);
   }
 
   // Close connection (for cleanup)

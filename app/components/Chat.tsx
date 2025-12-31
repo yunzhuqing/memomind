@@ -42,6 +42,7 @@ export default function ChatComponent() {
   useEffect(() => {
     loadModels();
     loadConversations();
+    loadUserSettings();
   }, []);
 
   // Auto-scroll to bottom when new messages arrive
@@ -72,6 +73,32 @@ export default function ChatComponent() {
       setModels([
         { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai' },
       ]);
+    }
+  };
+
+  const loadUserSettings = async () => {
+    try {
+      const response = await fetch('/api/user/settings');
+      if (response.ok) {
+        const settings = await response.json();
+        if (settings.defaultModel) {
+          setModel(settings.defaultModel);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user settings:', error);
+    }
+  };
+
+  const updateDefaultModel = async (newModel: string) => {
+    try {
+      await fetch('/api/user/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultModel: newModel }),
+      });
+    } catch (error) {
+      console.error('Error updating default model:', error);
     }
   };
 
@@ -401,33 +428,41 @@ export default function ChatComponent() {
           </div>
         </div>
 
-        <div className="p-4 border-t border-gray-200">
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-          >
-            {models.map((m: Model) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="px-4 py-3 flex items-center gap-3 bg-white">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+        <div className="px-4 py-3 flex items-center justify-between bg-white border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500 hidden sm:inline">Model:</span>
+            <select
+              value={model}
+              onChange={(e) => {
+                const newModel = e.target.value;
+                setModel(newModel);
+                updateDefaultModel(newModel);
+              }}
+              className="bg-gray-50 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+            >
+              {models.map((m: Model) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Messages Area */}
@@ -489,7 +524,7 @@ export default function ChatComponent() {
                                   key={idx}
                                   src={imgPart.image} 
                                   alt={`Image ${idx + 1}`}
-                                  className="max-w-xs max-h-64 rounded-lg border border-gray-300 object-contain"
+                                  className="max-w-[200px] max-h-[200px] rounded-lg border border-gray-300 object-contain hover:max-w-full hover:max-h-[500px] transition-all duration-300 cursor-zoom-in"
                                 />
                               ))}
                             </div>
@@ -527,6 +562,13 @@ export default function ChatComponent() {
                                     <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
                                       {children}
                                     </a>
+                                  ),
+                                  img: ({ src, alt }: any) => (
+                                    <img 
+                                      src={src} 
+                                      alt={alt} 
+                                      className="max-w-[200px] max-h-[200px] rounded-lg border border-gray-300 object-contain hover:max-w-full hover:max-h-[500px] transition-all duration-300 cursor-zoom-in" 
+                                    />
                                   ),
                                 }}
                               >
