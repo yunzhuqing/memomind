@@ -42,15 +42,15 @@ export class User {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @OneToMany(() => require('./File').File, (file: File) => file.user)
+  @OneToMany('File', (file: File) => file.user)
   files?: File[];
 
-  @OneToMany(() => require('./Note').Note, (note: Note) => note.user)
+  @OneToMany('Note', (note: Note) => note.user)
   notes?: Note[];
 
-  @OneToMany(() => require('./Task').Task, (task: Task) => task.user)
+  @OneToMany('Task', (task: Task) => task.user)
   tasks?: Task[];
 
-  @OneToMany(() => require('./Directory').Directory, (directory: Directory) => directory.user)
+  @OneToMany('Directory', (directory: Directory) => directory.user)
   directories?: Directory[];
 }

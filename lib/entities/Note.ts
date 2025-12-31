@@ -8,7 +8,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
-import { User } from './User';
+import type { User } from './User';
 
 @Entity('notes')
 export class Note {
@@ -31,7 +31,7 @@ export class Note {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @ManyToOne(() => User, (user) => user.notes, { onDelete: 'CASCADE' })
+  @ManyToOne('User', (user: User) => user.notes, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user?: User;
 }
