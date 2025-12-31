@@ -7,10 +7,10 @@ import {
   OneToMany,
   Index,
 } from 'typeorm';
-import type { File } from './File';
-import type { Note } from './Note';
-import type { Task } from './Task';
-import type { Directory } from './Directory';
+import { File } from './File';
+import { Note } from './Note';
+import { Task } from './Task';
+import { Directory } from './Directory';
 
 @Entity('users')
 export class User {
@@ -42,15 +42,18 @@ export class User {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @OneToMany('File', (file: File) => file.user)
+  // Using standard imports + arrow functions works for OneToMany because
+  // the 'type' of files is File[], which doesn't trigger the metadata circular dependency issue
+  // as strongly as the singular side does.
+  @OneToMany(() => File, (file) => file.user)
   files?: File[];
 
-  @OneToMany('Note', (note: Note) => note.user)
+  @OneToMany(() => Note, (note) => note.user)
   notes?: Note[];
 
-  @OneToMany('Task', (task: Task) => task.user)
+  @OneToMany(() => Task, (task) => task.user)
   tasks?: Task[];
 
-  @OneToMany('Directory', (directory: Directory) => directory.user)
+  @OneToMany(() => Directory, (directory) => directory.user)
   directories?: Directory[];
 }

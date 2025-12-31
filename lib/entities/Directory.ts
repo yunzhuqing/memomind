@@ -9,6 +9,7 @@ import {
   Index,
   Unique,
 } from 'typeorm';
+import { User as UserEntity } from './User';
 import type { User } from './User';
 
 @Entity('directories')
@@ -38,7 +39,7 @@ export class Directory {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
 
-  @ManyToOne('User', (user: User) => user.directories, { onDelete: 'CASCADE' })
+  @ManyToOne(() => UserEntity, (user) => user.directories, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user?: User;
 }

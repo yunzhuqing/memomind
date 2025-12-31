@@ -1,4 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { User as UserEntity } from './User';
 import type { User } from './User';
 
 @Entity('conversations')
@@ -12,7 +13,7 @@ export class Conversation {
   @Column({ name: 'user_id' })
   userId!: number;
 
-  @ManyToOne('User')
+  @ManyToOne(() => UserEntity)
   @JoinColumn({ name: 'user_id' })
   user!: User;
 
