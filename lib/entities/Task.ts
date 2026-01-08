@@ -4,12 +4,8 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
   Index,
 } from 'typeorm';
-import { User as UserEntity } from './User';
-import type { User } from './User';
 
 @Entity('tasks')
 export class Task {
@@ -58,8 +54,4 @@ export class Task {
 
   @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
   completedAt?: Date;
-
-  @ManyToOne(() => UserEntity, (user) => user.tasks, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'user_id' })
-  user?: User;
 }

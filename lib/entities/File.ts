@@ -4,12 +4,8 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
   Index,
 } from 'typeorm';
-import { User as UserEntity } from './User';
-import type { User } from './User';
 
 @Entity('files')
 export class File {
@@ -51,8 +47,4 @@ export class File {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt!: Date;
-
-  @ManyToOne(() => UserEntity, (user) => user.files, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'user_id' })
-  user?: User;
 }

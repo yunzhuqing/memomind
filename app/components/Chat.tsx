@@ -404,10 +404,18 @@ export default function ChatComponent() {
         <div className="flex-1 overflow-y-auto p-2">
           <div className="space-y-1">
             {conversations.map((conv) => (
-              <button
+              <div
                 key={conv.id}
                 onClick={() => loadConversation(conv.id)}
-                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 rounded-lg transition-colors group flex items-center justify-between text-gray-700 ${
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    loadConversation(conv.id);
+                  }
+                }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 rounded-lg transition-colors group flex items-center justify-between text-gray-700 cursor-pointer ${
                   currentConversationId === conv.id ? 'bg-gray-100' : ''
                 }`}
               >
@@ -423,7 +431,7 @@ export default function ChatComponent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
                 </button>
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -431,10 +439,10 @@ export default function ChatComponent() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col bg-white">
         {/* Header */}
-        <div className="px-4 py-3 flex items-center justify-between bg-white border-b border-gray-200">
-          <div className="flex items-center gap-3">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center bg-white sticky top-0 z-10">
+          <div className="w-1/3 flex items-center justify-start">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-700"
@@ -445,24 +453,41 @@ export default function ChatComponent() {
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500 hidden sm:inline">Model:</span>
-            <select
-              value={model}
-              onChange={(e) => {
-                const newModel = e.target.value;
-                setModel(newModel);
-                updateDefaultModel(newModel);
-              }}
-              className="bg-gray-50 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-            >
-              {models.map((m: Model) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+          <div className="w-1/3 flex items-center justify-center">
+            <div className="relative inline-block text-left group">
+              <div className="flex items-center gap-1 px-3 py-1.5 hover:bg-gray-100 rounded-lg cursor-pointer transition-colors" title="Change Model">
+                <span className="font-medium text-gray-700">{models.find(m => m.id === model)?.name || model}</span>
+                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+              
+              {/* Dropdown Menu */}
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-100 py-1 hidden group-hover:block z-20">
+                {models.map((m: Model) => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setModel(m.id);
+                      updateDefaultModel(m.id);
+                    }}
+                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center justify-between ${
+                      model === m.id ? 'text-blue-600 bg-blue-50' : 'text-gray-700'
+                    }`}
+                  >
+                    <span>{m.name}</span>
+                    {model === m.id && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
+          
+          <div className="w-1/3"></div>
         </div>
 
         {/* Messages Area */}

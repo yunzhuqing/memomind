@@ -4,11 +4,8 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToOne,
-  JoinColumn,
   Index,
 } from 'typeorm';
-import type { User } from './User';
 
 @Entity('user_settings')
 export class UserSettings {
@@ -18,10 +15,6 @@ export class UserSettings {
   @Column({ name: 'user_id', type: 'int', unique: true })
   @Index()
   userId!: number;
-
-  @OneToOne('User', { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'user_id' })
-  user?: User;
 
   @Column({ type: 'varchar', length: 10, default: 'en' })
   language!: string;
